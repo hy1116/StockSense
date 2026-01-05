@@ -1,0 +1,16 @@
+.stock-detail {
+  padding: 2rem 0;
+}
+
+.stock-detail h1 {
+  margin-bottom: 2rem;
+  color: #646cff;
+}
+
+.stock-detail .card {
+  margin-bottom: 2rem;
+}
+
+.stock-detail .card h2 {
+  margin-bottom: 1rem;
+}
