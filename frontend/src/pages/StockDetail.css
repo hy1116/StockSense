@@ -1,16 +1,321 @@
 .stock-detail {
   padding: 2rem 0;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-.stock-detail h1 {
+/* 로딩 & 에러 */
+.stock-detail .loading,
+.stock-detail .error {
+  text-align: center;
+  padding: 3rem;
+  font-size: 1.2rem;
+}
+
+.stock-detail .error {
+  color: #ff4444;
+}
+
+/* 헤더 */
+.stock-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 2rem;
   margin-bottom: 2rem;
-  color: #646cff;
+  color: white;
 }
 
+.stock-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.stock-title h1 {
+  margin: 0;
+  font-size: 2rem;
+  color: white;
+}
+
+.stock-code {
+  /* background: rgba(255, 255, 255, 0.2); */
+  color: dimgrey;
+  padding: 0.3rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  float: right;
+}
+
+.market-badge {
+  background: rgba(255, 255, 255, 0.3);
+  padding: 0.3rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.stock-price-info {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.current-price {
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+.price-change {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+/* 카드 */
 .stock-detail .card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
   margin-bottom: 2rem;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
 }
 
 .stock-detail .card h2 {
-  margin-bottom: 1rem;
+  margin: 0 0 1.5rem 0;
+  font-size: 1.5rem;
+  color: #fff;
+}
+
+/* 기간 선택 버튼 */
+.period-selector {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.period-selector button {
+  padding: 0.5rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.period-selector button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #646cff;
+}
+
+.period-selector button.active {
+  background: #646cff;
+  border-color: #646cff;
+}
+
+/* 차트 테이블 */
+.chart-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.chart-table th,
+.chart-table td {
+  padding: 0.75rem;
+  text-align: right;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.chart-table th {
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.chart-table th:first-child,
+.chart-table td:first-child {
+  text-align: left;
+}
+
+.chart-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* 가격 색상 */
+.price-up {
+  color: #ff4444;
+}
+
+.price-down {
+  color: #4444ff;
+}
+
+/* 기본 정보 그리드 */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.info-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9rem;
+}
+
+.info-value {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* 예측 */
+.prediction-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.prediction-main {
+  display: flex;
+  gap: 3rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border-radius: 8px;
+}
+
+.prediction-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1.5rem;
+}
+
+.prediction-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.prediction-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9rem;
+}
+
+.prediction-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.price-highlight {
+  color: #ffd700;
+  font-size: 2rem;
+}
+
+.prediction-badge {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.trend-up {
+  background: rgba(255, 68, 68, 0.2);
+  color: #ff4444;
+  border: 1px solid #ff4444;
+}
+
+.trend-down {
+  background: rgba(68, 68, 255, 0.2);
+  color: #4444ff;
+  border: 1px solid #4444ff;
+}
+
+.trend-neutral {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.recommend-매수 {
+  background: rgba(255, 68, 68, 0.2);
+  color: #ff4444;
+  border: 1px solid #ff4444;
+}
+
+.recommend-매도 {
+  background: rgba(68, 68, 255, 0.2);
+  color: #4444ff;
+  border: 1px solid #4444ff;
+}
+
+.recommend-보유 {
+  background: rgba(255, 215, 0, 0.2);
+  color: #ffd700;
+  border: 1px solid #ffd700;
+}
+
+.prediction-note {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+  font-style: italic;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  border-left: 3px solid #646cff;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .stock-header {
+    padding: 1.5rem;
+  }
+
+  .stock-title {
+    flex-wrap: wrap;
+  }
+
+  .stock-title h1 {
+    font-size: 1.5rem;
+  }
+
+  .current-price {
+    font-size: 2rem;
+  }
+
+  .price-change {
+    font-size: 1rem;
+  }
+
+  .info-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .prediction-main {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .chart-table {
+    font-size: 0.85rem;
+  }
+
+  .chart-table th,
+  .chart-table td {
+    padding: 0.5rem;
+  }
 }

@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 from functools import lru_cache
 
+from app.services.redis_client import get_redis_client
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,6 +35,11 @@ class KISAPIClient:
         self.use_mock = use_mock
         self.cust_type = cust_type
 
+        # Redis 클라이언트
+        self.redis = get_redis_client()
+        self.token_key = f"kis_token:{self.app_key}"
+
+        # 메모리 캐시 (fallback)
         self._access_token = None
         self._token_expiry = None
 
@@ -67,11 +74,23 @@ class KISAPIClient:
         return headers
 
     def get_access_token(self) -> str:
-        """접근 토큰 발급"""
+        """접근 토큰 발급 (Redis 캐시 사용)"""
+        logger.info(self.redis.is_available())
+        # 1. Redis에서 토큰 조회
+        if self.redis.is_available():
+            cached_token = self.redis.get(self.token_key)
+            if cached_token:
+                logger.info("Using cached token from Redis")
+                self._access_token = cached_token
+                return cached_token
+
+        # 2. 메모리 캐시 확인 (Redis 미사용 시)
         if self._access_token and self._token_expiry:
             if datetime.now() < self._token_expiry:
+                logger.info("Using cached token from memory")
                 return self._access_token
 
+        # 3. 새로운 토큰 발급
         url = f"{self.base_url}/oauth2/tokenP"
         headers = {"Content-Type": "application/json"}
         data = {
@@ -89,10 +108,20 @@ class KISAPIClient:
 
             if response.status_code == 200:
                 if "access_token" in result:
-                    self._access_token = result["access_token"]
+                    access_token = result["access_token"]
                     expires_in = int(result.get("expires_in", 86400))
+
+                    # Redis에 토큰 저장 (만료 시간 5분 전까지)
+                    if self.redis.is_available():
+                        cache_expire = expires_in - 300  # 5분 여유
+                        self.redis.set(self.token_key, access_token, expire=cache_expire)
+                        logger.info(f"Token cached in Redis (expires in {cache_expire}s)")
+
+                    # 메모리에도 저장 (fallback)
+                    self._access_token = access_token
                     self._token_expiry = datetime.now() + timedelta(seconds=expires_in - 300)
-                    return self._access_token
+
+                    return access_token
                 else:
                     raise Exception(f"토큰 발급 실패 - access_token 없음: {result}")
             else:
@@ -169,7 +198,7 @@ class KISAPIClient:
             price: 주문가격 (지정가) - 시장가는 0
             order_type: 주문유형 (00: 지정가, 01: 시장가)
         """
-        tr_id = "VTTC0802U" if self.use_mock else "TTTC0802U"
+        tr_id = "TTTC0802U" if self.use_mock else "VTTC0802U"
         url = f"{self.base_url}/uapi/domestic-stock/v1/trading/order-cash"
 
         headers = self._get_headers(tr_id)
@@ -231,6 +260,73 @@ class KISAPIClient:
             return result
         else:
             raise Exception(f"매도 주문 실패: {response.text}")
+
+    def get_daily_chart(self, stock_code: str, period: str = "D", count: int = 100) -> Dict:
+        """주식 차트 데이터 조회
+
+        Args:
+            stock_code: 종목코드 (6자리)
+            period: 기간 구분 (D: 일, W: 주, M: 월)
+            count: 조회 개수 (최대 100)
+        """
+        tr_id = "FHKST03010100"
+        url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
+
+        headers = self._get_headers(tr_id)
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": stock_code,
+            "FID_INPUT_DATE_1": "",
+            "FID_INPUT_DATE_2": "",
+            "FID_PERIOD_DIV_CODE": period,
+            "FID_ORG_ADJ_PRC": "0"
+        }
+
+        self._log_request("GET", url, headers, params=params)
+        response = requests.get(url, headers=headers, params=params)
+
+        result = response.json() if response.status_code == 200 else {"error": response.text}
+        self._log_response("GET", url, response.status_code, result)
+
+        if response.status_code == 200:
+            return result
+        else:
+            raise Exception(f"차트 데이터 조회 실패: {response.text}")
+
+    def get_volume_ranking(self) -> Dict:
+        """거래량 순위 조회
+
+        Returns:
+            거래량 상위 종목 목록 (최대 30개)
+        """
+        tr_id = "FHPST01710000"
+        url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/volume-rank"
+
+        headers = self._get_headers(tr_id)
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "J",  # J: 주식, ETF, ETN 전체
+            "FID_COND_SCR_DIV_CODE": "20171",  # 거래량 순위
+            "FID_INPUT_ISCD": "0000",  # 전체
+            "FID_DIV_CLS_CODE": "0",  # 0: 전체
+            "FID_BLNG_CLS_CODE": "0",  # 소속 구분
+            "FID_TRGT_CLS_CODE": "111111111",  # 대상 구분 (전체)
+            "FID_TRGT_EXLS_CLS_CODE": "000000",  # 제외 구분
+            "FID_INPUT_PRICE_1": "",  # 가격 범위 시작
+            "FID_INPUT_PRICE_2": "",  # 가격 범위 종료
+            "FID_VOL_CNT": "",  # 거래량 수
+            "FID_INPUT_DATE_1": ""  # 조회 시작일
+        }
+
+        self._log_request("GET", url, headers, params=params)
+        response = requests.get(url, headers=headers, params=params)
+
+        result = response.json() if response.status_code == 200 else {"error": response.text}
+        self._log_response("GET", url, response.status_code, result)
+
+        if response.status_code == 200:
+            return result
+        else:
+            raise Exception(f"거래량 순위 조회 실패: {response.text}")
 
     def get_order_history(self) -> Dict:
         """주문 내역 조회"""

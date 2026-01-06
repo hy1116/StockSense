@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { getHealthCheck } from '../services/api'
+import { getHealthCheck, getTopStocks, getPortfolio } from '../services/api'
 import './Home.css'
 
 function Home() {
@@ -12,14 +12,28 @@ function Home() {
     queryFn: getHealthCheck,
   })
 
-  const popularStocks = [
-    { symbol: 'AAPL', name: 'Apple Inc.' },
-    { symbol: 'GOOGL', name: 'Alphabet Inc.' },
-    { symbol: 'MSFT', name: 'Microsoft Corporation' },
-    { symbol: 'TSLA', name: 'Tesla, Inc.' },
-    { symbol: '005930.KS', name: '삼성전자' },
-    { symbol: '000660.KS', name: 'SK하이닉스' },
-  ]
+  const { data: topStocksData, isLoading: isLoadingStocks } = useQuery({
+    queryKey: ['topStocks'],
+    queryFn: () => getTopStocks(8),
+    refetchInterval: 60000, // 1분마다 새로고침
+  })
+
+  const { data: portfolio, isLoading: isLoadingPortfolio } = useQuery({
+    queryKey: ['portfolio'],
+    queryFn: getPortfolio,
+    refetchInterval: 300000, // 5분마다 새로고침
+  })
+
+  const formatNumber = (num) => {
+    if (!num) return '0'
+    return num.toLocaleString('ko-KR')
+  }
+
+  const getPriceChangeClass = (change) => {
+    if (change > 0) return 'price-up'
+    if (change < 0) return 'price-down'
+    return ''
+  }
 
   const handleSearch = (e) => {
     e.preventDefault()
@@ -42,7 +56,7 @@ function Home() {
         <form onSubmit={handleSearch} className="search-form">
           <input
             type="text"
-            placeholder="종목 코드 입력 (예: AAPL, 005930.KS)"
+            placeholder="종목 코드 입력 (예: 005930, 035420)"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="search-input"
@@ -53,20 +67,71 @@ function Home() {
         </form>
       </section>
 
+      {/* 내 자산 섹션 */}
+      <section className="portfolio-summary">
+        <h2>내 자산</h2>
+        {isLoadingPortfolio ? (
+          <div className="loading">자산 정보를 불러오는 중...</div>
+        ) : portfolio ? (
+          <div className="portfolio-cards">
+            <div className="portfolio-card">
+              <div className="portfolio-label">총 자산</div>
+              <div className="portfolio-value">{formatNumber(portfolio.total_asset)}원</div>
+            </div>
+            <div className="portfolio-card">
+              <div className="portfolio-label">보유 현금</div>
+              <div className="portfolio-value">{formatNumber(portfolio.cash)}원</div>
+            </div>
+            <div className="portfolio-card">
+              <div className="portfolio-label">주식 평가액</div>
+              <div className="portfolio-value">{formatNumber(portfolio.stock_eval_amount)}원</div>
+            </div>
+            <div className="portfolio-card">
+              <div className="portfolio-label">평가 손익</div>
+              <div className={`portfolio-value ${getPriceChangeClass(portfolio.total_profit_rate)}`}>
+                {formatNumber(portfolio.total_profit_loss)}원
+                <span className="portfolio-rate">
+                  ({portfolio.total_profit_rate > 0 ? '+' : ''}{portfolio.total_profit_rate.toFixed(2)}%)
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="error">자산 정보를 불러올 수 없습니다</div>
+        )}
+      </section>
+
       <section className="popular-stocks">
-        <h2>인기 종목</h2>
-        <div className="stock-grid">
-          {popularStocks.map((stock) => (
-            <Link
-              key={stock.symbol}
-              to={`/stock/${stock.symbol}`}
-              className="stock-card"
-            >
-              <h3>{stock.symbol}</h3>
-              <p>{stock.name}</p>
-            </Link>
-          ))}
-        </div>
+        <h2>거래량 상위 종목</h2>
+        {isLoadingStocks ? (
+          <div className="loading">종목 정보를 불러오는 중...</div>
+        ) : topStocksData?.stocks ? (
+          <div className="stock-grid">
+            {topStocksData.stocks.map((stock) => (
+              <Link
+                key={stock.stock_code}
+                to={`/stock/${stock.stock_code}`}
+                className="stock-card"
+              >
+                <div className="stock-rank">#{stock.rank}</div>
+                <h3>{stock.stock_name}</h3>
+                <div className="stock-price">
+                  {formatNumber(stock.current_price)}원
+                </div>
+                <div className={`stock-change ${getPriceChangeClass(stock.change_rate)}`}>
+                  {stock.change_rate > 0 ? '+' : ''}
+                  {stock.change_rate.toFixed(2)}%
+                </div>
+                {/* <div className="stock-market-cap">
+                  거래량 순위: {stock.market_cap}
+                </div> */}
+                <div className="stock-code">{stock.stock_code}</div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="error">종목 정보를 불러올 수 없습니다</div>
+        )}
       </section>
 
       <section className="features">

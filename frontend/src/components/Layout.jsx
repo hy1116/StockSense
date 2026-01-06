@@ -6,7 +6,7 @@ function Layout() {
     <div className="layout">
       <header className="header">
         <div className="header-content">
-          <h1 className="logo">StockSense</h1>
+          <h1 className="logo"><Link to="/">StockSense</Link></h1>
           <nav className="nav">
             <Link to="/">홈</Link>
             <Link to="/portfolio">포트폴리오</Link>

@@ -72,3 +72,61 @@ class StockPriceInfo(BaseModel):
     high_price: int = Field(..., description="고가")
     low_price: int = Field(..., description="저가")
     open_price: int = Field(..., description="시가")
+
+
+class ChartData(BaseModel):
+    """차트 데이터 (OHLCV)"""
+    date: str = Field(..., description="날짜 (YYYYMMDD)")
+    open: int = Field(..., description="시가")
+    high: int = Field(..., description="고가")
+    low: int = Field(..., description="저가")
+    close: int = Field(..., description="종가")
+    volume: int = Field(..., description="거래량")
+
+
+class StockBasicInfo(BaseModel):
+    """종목 기본 정보"""
+    stock_code: str = Field(..., description="종목코드")
+    stock_name: str = Field(..., description="종목명")
+    market: str = Field(..., description="시장구분 (KOSPI/KOSDAQ)")
+    current_price: int = Field(..., description="현재가")
+    change_price: int = Field(..., description="전일대비")
+    change_rate: float = Field(..., description="등락률(%)")
+    volume: int = Field(..., description="거래량")
+    market_cap: Optional[int] = Field(None, description="시가총액")
+    per: Optional[float] = Field(None, description="PER")
+    pbr: Optional[float] = Field(None, description="PBR")
+
+
+class PredictionResult(BaseModel):
+    """주가 예측 결과"""
+    stock_code: str = Field(..., description="종목코드")
+    stock_name: str = Field(..., description="종목명")
+    current_price: int = Field(..., description="현재가")
+    predicted_price: float = Field(..., description="예측가")
+    prediction_date: str = Field(..., description="예측 날짜")
+    confidence: float = Field(..., description="예측 신뢰도 (0-1)")
+    trend: str = Field(..., description="추세 (상승/하락/보합)")
+    recommendation: str = Field(..., description="투자의견 (매수/매도/보유)")
+
+
+class StockDetailInfo(BaseModel):
+    """종목 상세 정보 (통합)"""
+    basic_info: StockBasicInfo = Field(..., description="기본 정보")
+    chart_data: List[ChartData] = Field(default=[], description="차트 데이터")
+    prediction: Optional[PredictionResult] = Field(None, description="예측 정보")
+
+
+class TopStock(BaseModel):
+    """시가총액 상위 종목 정보"""
+    rank: int = Field(..., description="순위")
+    stock_code: str = Field(..., description="종목코드")
+    stock_name: str = Field(..., description="종목명")
+    current_price: int = Field(..., description="현재가")
+    change_rate: float = Field(..., description="등락률(%)")
+    market_cap: int = Field(..., description="시가총액 (단위: 억원)")
+
+
+class TopStocksResponse(BaseModel):
+    """시가총액 상위 종목 목록"""
+    stocks: List[TopStock] = Field(..., description="상위 종목 리스트")

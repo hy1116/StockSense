@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     debug: bool = True
 
-    database_url: str = "sqlite:///./stocksense.db"
+    database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/stocksense"
 
     model_path: str = "./models"
     data_path: str = "./data"
@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     kis_base_url: str = "https://openapi.koreainvestment.com:9443"
     kis_use_mock: bool = False
     kis_cust_type: str = "P"
+
+    # Redis Configuration
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: str = ""
 
     class Config:
         env_file = ".env"

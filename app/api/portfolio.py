@@ -1,7 +1,8 @@
 """포트폴리오 API 엔드포인트"""
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List
 from datetime import datetime
+import logging
 
 from app.schemas.portfolio import (
     PortfolioSummary,
@@ -9,10 +10,20 @@ from app.schemas.portfolio import (
     OrderRequest,
     OrderResponse,
     OrderHistory,
-    StockPriceInfo
+    StockPriceInfo,
+    StockDetailInfo,
+    StockBasicInfo,
+    ChartData,
+    PredictionResult,
+    TopStock,
+    TopStocksResponse
 )
 from app.services.kis_api import get_kis_client, KISAPIClient
+from app.services.prediction import get_prediction_service, PredictionService
+from app.services.redis_client import get_redis_client
+import json
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/portfolio", tags=["Portfolio"])
 
 
@@ -20,8 +31,22 @@ router = APIRouter(prefix="/api/portfolio", tags=["Portfolio"])
 async def get_portfolio_balance(
     client: KISAPIClient = Depends(get_kis_client)
 ):
-    """계좌 잔고 및 포트폴리오 조회"""
+    """계좌 잔고 및 포트폴리오 조회 (Redis 캐시 5분)"""
     try:
+        redis = get_redis_client()
+        cache_key = "portfolio:balance"
+
+        # 1. Redis 캐시 확인
+        if redis.is_available():
+            cached_data = redis.get(cache_key)
+            if cached_data:
+                try:
+                    cached_dict = json.loads(cached_data)
+                    return PortfolioSummary(**cached_dict)
+                except Exception:
+                    pass
+
+        # 2. KIS API 호출
         result = client.get_balance()
 
         if result.get("rt_cd") != "0":
@@ -32,6 +57,10 @@ async def get_portfolio_balance(
 
         output1 = result.get("output1", [])
         output2 = result.get("output2", [{}])[0]
+
+        # 디버깅: 수익률 원본 값 로그
+        tot_evlu_pfls_rt = output2.get("tot_evlu_pfls_rt", 0)
+        logger.info(f"Portfolio total_profit_rate raw value: {tot_evlu_pfls_rt}")
 
         holdings = []
         for item in output1:
@@ -55,6 +84,14 @@ async def get_portfolio_balance(
             total_profit_rate=float(output2.get("tot_evlu_pfls_rt", 0)),
             holdings=holdings
         )
+
+        # 3. Redis에 캐싱 (5분 = 300초)
+        if redis.is_available():
+            try:
+                cache_data = json.dumps(summary.model_dump())
+                redis.set(cache_key, cache_data, expire=300)
+            except Exception:
+                pass
 
         return summary
 
@@ -90,8 +127,80 @@ async def get_stock_price(
             low_price=int(output.get("stck_lwpr", 0)),
             open_price=int(output.get("stck_oprc", 0))
         )
-
         return price_info
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stock/{stock_code}/detail", response_model=StockDetailInfo)
+async def get_stock_detail(
+    stock_code: str,
+    period: str = Query(default="D", description="차트 기간 (D:일봉, W:주봉, M:월봉)"),
+    client: KISAPIClient = Depends(get_kis_client),
+    predictor: PredictionService = Depends(get_prediction_service)
+):
+    """종목 상세 정보 조회 (기본정보 + 차트 + 예측)"""
+    try:
+        # 1. 현재가 정보 조회
+        price_result = client.get_stock_price(stock_code)
+        if price_result.get("rt_cd") != "0":
+            raise HTTPException(
+                status_code=400,
+                detail=f"현재가 조회 실패: {price_result.get('msg1', 'Unknown error')}"
+            )
+
+        price_output = price_result.get("output", {})
+        stock_name = price_output.get("hts_kor_isnm", "")
+
+        # 디버깅: 주식명 로그
+        logger.info(f"Stock detail for {stock_code}: stock_name='{stock_name}', price_output keys={list(price_output.keys())}")
+
+        # 기본 정보 구성
+        basic_info = StockBasicInfo(
+            stock_code=stock_code,
+            stock_name=stock_name,
+            market=price_output.get("bstp_kor_isnm", "KOSPI"),
+            current_price=int(price_output.get("stck_prpr", 0)),
+            change_price=int(price_output.get("prdy_vrss", 0)),
+            change_rate=float(price_output.get("prdy_ctrt", 0)),
+            volume=int(price_output.get("acml_vol", 0)),
+            market_cap=int(price_output.get("stck_avls", 0)) if price_output.get("stck_avls") else None,
+            per=float(price_output.get("per", 0)) if price_output.get("per") else None,
+            pbr=float(price_output.get("pbr", 0)) if price_output.get("pbr") else None
+        )
+
+        # 2. 차트 데이터 조회
+        chart_result = client.get_daily_chart(stock_code, period=period, count=100)
+        chart_data = []
+
+        if chart_result.get("rt_cd") == "0":
+            output2 = chart_result.get("output2", [])
+            for item in output2[:30]:  # 최근 30개 데이터
+                chart_data.append(ChartData(
+                    date=item.get("stck_bsop_date", ""),
+                    open=int(item.get("stck_oprc", 0)),
+                    high=int(item.get("stck_hgpr", 0)),
+                    low=int(item.get("stck_lwpr", 0)),
+                    close=int(item.get("stck_clpr", 0)),
+                    volume=int(item.get("acml_vol", 0))
+                ))
+
+        # 3. 주가 예측
+        prediction_data = None
+        if chart_result.get("rt_cd") == "0":
+            output2 = chart_result.get("output2", [])
+            pred_result = predictor.predict_price(stock_code, stock_name, output2)
+            prediction_data = PredictionResult(**pred_result)
+
+        # 통합 응답
+        detail_info = StockDetailInfo(
+            basic_info=basic_info,
+            chart_data=chart_data,
+            prediction=prediction_data
+        )
+
+        return detail_info
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -210,6 +319,65 @@ async def get_order_history(
             orders.append(order)
 
         return orders
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/top-stocks", response_model=TopStocksResponse)
+async def get_top_stocks(
+    limit: int = Query(default=8, ge=1, le=30, description="조회할 종목 수"),
+    client: KISAPIClient = Depends(get_kis_client)
+):
+    """거래량 상위 종목 조회 (Redis 캐시 10분)"""
+    try:
+        redis = get_redis_client()
+        cache_key = f"top_volume_stocks:limit_{limit}"
+
+        # 1. Redis 캐시 확인
+        if redis.is_available():
+            cached_data = redis.get(cache_key)
+            if cached_data:
+                try:
+                    cached_dict = json.loads(cached_data)
+                    return TopStocksResponse(**cached_dict)
+                except Exception:
+                    pass
+
+        # 2. KIS API 호출 (거래량 순위)
+        result = client.get_volume_ranking()
+
+        if result.get("rt_cd") != "0":
+            raise HTTPException(
+                status_code=400,
+                detail=f"거래량 순위 조회 실패: {result.get('msg1', 'Unknown error')}"
+            )
+
+        output = result.get("output", [])
+
+        stocks = []
+        for idx, item in enumerate(output[:limit], start=1):
+            stock = TopStock(
+                rank=idx,
+                stock_code=item.get("mksc_shrn_iscd", ""),
+                stock_name=item.get("hts_kor_isnm", ""),
+                current_price=int(item.get("stck_prpr", 0)),
+                change_rate=float(item.get("prdy_ctrt", 0)),
+                market_cap=int(item.get("data_rank", 0))  # 거래량으로 변경
+            )
+            stocks.append(stock)
+
+        response = TopStocksResponse(stocks=stocks)
+
+        # 3. Redis에 캐싱 (10분 = 600초)
+        if redis.is_available():
+            try:
+                cache_data = json.dumps(response.model_dump())
+                redis.set(cache_key, cache_data, expire=600)
+            except Exception:
+                pass
+
+        return response
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
