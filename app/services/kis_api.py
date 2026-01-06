@@ -22,7 +22,8 @@ class KISAPIClient:
         account_number: str,
         account_product_code: str = "01",
         base_url: str = "https://openapi.koreainvestment.com:9443",
-        use_mock: bool = True
+        use_mock: bool = True,
+        cust_type: str = "P",
     ):
         self.app_key = app_key
         self.app_secret = app_secret
@@ -30,9 +31,24 @@ class KISAPIClient:
         self.account_product_code = account_product_code
         self.base_url = base_url
         self.use_mock = use_mock
+        self.cust_type = cust_type
 
         self._access_token = None
         self._token_expiry = None
+
+    def _log_request(self, method: str, url: str, headers: Dict, params: Dict = None, data: Dict = None):
+        """KIS API 요청 로깅"""
+        logger.info(f"→ KIS API {method} {url}")
+        logger.info(f"  Headers: {headers}")
+        if params:
+            logger.info(f"  Params: {params}")
+        if data:
+            logger.info(f"  Body: {data}")
+
+    def _log_response(self, method: str, url: str, status_code: int, response_data: Dict):
+        """KIS API 응답 로깅"""
+        logger.info(f"← KIS API {method} {url} | Status: {status_code}")
+        logger.info(f"  Response: {response_data}")
 
     def _get_headers(self, tr_id: str, token_required: bool = True) -> Dict[str, str]:
         """API 요청 헤더 생성"""
@@ -40,7 +56,8 @@ class KISAPIClient:
             "Content-Type": "application/json; charset=utf-8",
             "appkey": self.app_key,
             "appsecret": self.app_secret,
-            "tr_id": tr_id
+            "tr_id": tr_id,
+            "custtype": self.cust_type
         }
 
         if token_required:
@@ -53,7 +70,6 @@ class KISAPIClient:
         """접근 토큰 발급"""
         if self._access_token and self._token_expiry:
             if datetime.now() < self._token_expiry:
-                logger.info("Using cached access token")
                 return self._access_token
 
         url = f"{self.base_url}/oauth2/tokenP"
@@ -64,44 +80,33 @@ class KISAPIClient:
             "appsecret": self.app_secret
         }
 
-        logger.info(f"Requesting access token from: {url}")
-        logger.debug(f"App Key: {self.app_key[:10]}...")
-        logger.debug(f"Request data: {data}")
-
         try:
+            self._log_request("POST", url, headers, data=data)
             response = requests.post(url, headers=headers, json=data, timeout=10)
 
-            logger.info(f"Token response status: {response.status_code}")
-            logger.info(f"Token response headers: {dict(response.headers)}")
-            logger.info(f"Token response body: {response.text}")
+            result = response.json() if response.status_code == 200 else {"error": response.text}
+            self._log_response("POST", url, response.status_code, result)
 
             if response.status_code == 200:
-                result = response.json()
-
                 if "access_token" in result:
                     self._access_token = result["access_token"]
                     expires_in = int(result.get("expires_in", 86400))
                     self._token_expiry = datetime.now() + timedelta(seconds=expires_in - 300)
-                    logger.info(f"Access token acquired successfully. Expires in {expires_in} seconds")
                     return self._access_token
                 else:
-                    logger.error(f"No access_token in response: {result}")
                     raise Exception(f"토큰 발급 실패 - access_token 없음: {result}")
             else:
-                logger.error(f"Token request failed with status {response.status_code}")
-                logger.error(f"Response: {response.text}")
                 raise Exception(f"토큰 발급 실패 (HTTP {response.status_code}): {response.text}")
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Network error during token request: {str(e)}")
             raise Exception(f"토큰 발급 네트워크 오류: {str(e)}")
 
     def get_balance(self) -> Dict:
         """계좌 잔고 조회"""
-        tr_id = "VTTC8434R" if self.use_mock else "TTTC8434R"
+        tr_id = "TTTC8434R" if self.use_mock else "VTTC8434R"
         url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
 
-        headers = self._get_headers(tr_id)
+        headers = self._get_headers(tr_id, True)
         params = {
             "CANO": self.account_number,
             "ACNT_PRDT_CD": self.account_product_code,
@@ -116,10 +121,14 @@ class KISAPIClient:
             "CTX_AREA_NK100": ""
         }
 
+        self._log_request("GET", url, headers, params=params)
         response = requests.get(url, headers=headers, params=params)
 
+        result = response.json() if response.status_code == 200 else {"error": response.text}
+        self._log_response("GET", url, response.status_code, result)
+
         if response.status_code == 200:
-            return response.json()
+            return result
         else:
             raise Exception(f"잔고 조회 실패: {response.text}")
 
@@ -134,10 +143,14 @@ class KISAPIClient:
             "FID_INPUT_ISCD": stock_code
         }
 
+        self._log_request("GET", url, headers, params=params)
         response = requests.get(url, headers=headers, params=params)
 
+        result = response.json() if response.status_code == 200 else {"error": response.text}
+        self._log_response("GET", url, response.status_code, result)
+
         if response.status_code == 200:
-            return response.json()
+            return result
         else:
             raise Exception(f"현재가 조회 실패: {response.text}")
 
@@ -169,10 +182,14 @@ class KISAPIClient:
             "ORD_UNPR": str(price)
         }
 
+        self._log_request("POST", url, headers, data=data)
         response = requests.post(url, headers=headers, json=data)
 
+        result = response.json() if response.status_code == 200 else {"error": response.text}
+        self._log_response("POST", url, response.status_code, result)
+
         if response.status_code == 200:
-            return response.json()
+            return result
         else:
             raise Exception(f"매수 주문 실패: {response.text}")
 
@@ -204,10 +221,14 @@ class KISAPIClient:
             "ORD_UNPR": str(price)
         }
 
+        self._log_request("POST", url, headers, data=data)
         response = requests.post(url, headers=headers, json=data)
 
+        result = response.json() if response.status_code == 200 else {"error": response.text}
+        self._log_response("POST", url, response.status_code, result)
+
         if response.status_code == 200:
-            return response.json()
+            return result
         else:
             raise Exception(f"매도 주문 실패: {response.text}")
 
@@ -234,10 +255,14 @@ class KISAPIClient:
             "CTX_AREA_NK100": ""
         }
 
+        self._log_request("GET", url, headers, params=params)
         response = requests.get(url, headers=headers, params=params)
 
+        result = response.json() if response.status_code == 200 else {"error": response.text}
+        self._log_response("GET", url, response.status_code, result)
+
         if response.status_code == 200:
-            return response.json()
+            return result
         else:
             raise Exception(f"주문 내역 조회 실패: {response.text}")
 
@@ -255,5 +280,6 @@ def get_kis_client() -> KISAPIClient:
         account_number=getattr(settings, 'kis_account_number', ''),
         account_product_code=getattr(settings, 'kis_account_product_code', '01'),
         base_url=getattr(settings, 'kis_base_url', 'https://openapi.koreainvestment.com:9443'),
-        use_mock=getattr(settings, 'kis_use_mock', True)
+        use_mock=getattr(settings, 'kis_use_mock', True),
+        cust_type=getattr(settings, 'kis_cust_type', "P")
     )
