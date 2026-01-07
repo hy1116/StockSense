@@ -1,19 +1,77 @@
 """주가 예측 서비스"""
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 from datetime import datetime, timedelta
+from pathlib import Path
 import statistics
 import numpy as np
+import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+import joblib
 
 logger = logging.getLogger(__name__)
 
 
 class PredictionService:
-    """주가 예측 서비스 (기술적 지표 + 이동평균 기반)"""
+    """주가 예측 서비스 (ML 모델 + 기술적 지표 기반)"""
 
-    def __init__(self):
+    def __init__(self, use_ml: bool = True, model_dir: str = "./models"):
+        """
+        Args:
+            use_ml: ML 모델 사용 여부 (True: ML 모델, False: 룰 기반)
+            model_dir: 모델 파일 디렉토리
+        """
+        self.use_ml = use_ml
+        self.model_dir = Path(model_dir)
+        self.ml_model = None
+        self.ml_scaler = None
+        self.feature_columns = []
+
+        # ML 모델 로드 시도
+        if self.use_ml:
+            try:
+                self._load_ml_model()
+                logger.info("✅ ML model loaded successfully")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to load ML model: {e}. Falling back to rule-based prediction.")
+                self.use_ml = False
+
+        # 룰 기반 예측용 스케일러
         self.scaler = MinMaxScaler(feature_range=(0, 1))
+
+    def _load_ml_model(self):
+        """ML 모델 로드"""
+        model_path = self.model_dir / "stock_prediction_v1.pkl"
+        scaler_path = self.model_dir / "scaler.pkl"
+        metadata_path = self.model_dir / "metadata.json"
+
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+
+        if not scaler_path.exists():
+            raise FileNotFoundError(f"Scaler file not found: {scaler_path}")
+
+        # 모델 로드
+        self.ml_model = joblib.load(model_path)
+        self.ml_scaler = joblib.load(scaler_path)
+
+        # 메타데이터에서 피처 컬럼 정보 로드
+        if metadata_path.exists():
+            import json
+            with open(metadata_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+                self.feature_columns = metadata.get('feature_columns', [])
+                logger.info(f"📊 Model metadata: trained_at={metadata.get('trained_at')}, "
+                          f"test_score={metadata.get('test_score'):.4f}")
+        else:
+            # 기본 피처 컬럼
+            self.feature_columns = [
+                'open', 'high', 'low', 'close', 'volume',
+                'ma5', 'ma10', 'ma20', 'rsi',
+                'bb_upper', 'bb_middle', 'bb_lower',
+                'macd', 'macd_signal', 'macd_diff',
+                'price_change_1d', 'volume_change'
+            ]
 
     def predict_price(self, stock_code: str, stock_name: str, chart_data: List[Dict]) -> Dict:
         """주가 예측
@@ -27,7 +85,7 @@ class PredictionService:
             예측 결과
         """
         try:
-            logger.info(f"Prediction start for {stock_code}: chart_data length={len(chart_data) if chart_data else 0}")
+            logger.info(f"🔮 Prediction start for {stock_code}: chart_data length={len(chart_data) if chart_data else 0}, use_ml={self.use_ml}")
 
             if not chart_data or len(chart_data) < 5:
                 logger.warning(f"Insufficient chart data for {stock_code}: len={len(chart_data) if chart_data else 0}")
@@ -70,16 +128,30 @@ class PredictionService:
             # 추세 분석
             trend = self._analyze_trend(current_price, ma5, ma10, ma20, rsi)
 
-            # 고급 예측 (여러 지표 결합)
-            predicted_price = self._predict_advanced(
-                current_price, ma5, ma10, ma20, rsi,
-                bb_upper, bb_middle, bb_lower, macd, signal
-            )
+            # 예측 가격 계산 (ML 또는 룰 기반)
+            if self.use_ml and self.ml_model is not None:
+                predicted_price = self._predict_with_ml(
+                    current_price, open_prices[0], high_prices[0], low_prices[0], volumes[0],
+                    ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
+                    close_prices
+                )
+                logger.info(f"🤖 ML prediction for {stock_code}: {predicted_price:.2f}")
+            else:
+                # 룰 기반 예측 (기존 로직)
+                predicted_price = self._predict_advanced(
+                    current_price, ma5, ma10, ma20, rsi,
+                    bb_upper, bb_middle, bb_lower, macd, signal
+                )
+                logger.info(f"📊 Rule-based prediction for {stock_code}: {predicted_price:.2f}")
 
             # 신뢰도 계산 (거래량 + 변동성 기반)
             confidence = self._calculate_confidence_advanced(
                 volumes, close_prices, current_price, bb_upper, bb_lower
             )
+
+            # ML 모델 사용 시 신뢰도 상향 조정
+            if self.use_ml and self.ml_model is not None:
+                confidence = min(0.95, confidence + 0.1)
 
             # 투자의견 생성
             recommendation = self._get_recommendation(
@@ -333,6 +405,80 @@ class PredictionService:
             return "매도"
         else:
             return "보유"
+
+    def _predict_with_ml(self, current_price: float, open_price: float, high_price: float,
+                        low_price: float, volume: float, ma5: float, ma10: float, ma20: float,
+                        rsi: float, bb_upper: float, bb_middle: float, bb_lower: float,
+                        macd: float, signal: float, close_prices: np.ndarray) -> float:
+        """ML 모델을 사용한 예측
+
+        Args:
+            current_price: 현재가
+            open_price: 시가
+            high_price: 고가
+            low_price: 저가
+            volume: 거래량
+            ma5, ma10, ma20: 이동평균
+            rsi: RSI
+            bb_upper, bb_middle, bb_lower: 볼린저 밴드
+            macd, signal: MACD
+            close_prices: 종가 배열 (변화율 계산용)
+
+        Returns:
+            예측 가격
+        """
+        try:
+            # 거래량 변화율 계산 (간단히 0으로 설정)
+            volume_change = 0.0
+            price_change_1d = 0.0
+
+            # 종가 배열이 있으면 변화율 계산
+            if len(close_prices) >= 2:
+                price_change_1d = (close_prices[0] - close_prices[1]) / close_prices[1]
+
+            # 피처 준비 (모델 학습 시 사용한 순서와 동일)
+            features_dict = {
+                'open': open_price,
+                'high': high_price,
+                'low': low_price,
+                'close': current_price,
+                'volume': volume,
+                'ma5': ma5,
+                'ma10': ma10,
+                'ma20': ma20,
+                'rsi': rsi,
+                'bb_upper': bb_upper,
+                'bb_middle': bb_middle,
+                'bb_lower': bb_lower,
+                'macd': macd,
+                'macd_signal': signal,
+                'macd_diff': macd - signal,
+                'price_change_1d': price_change_1d,
+                'volume_change': volume_change
+            }
+
+            # 모델이 요구하는 피처만 선택
+            features = [features_dict.get(col, 0) for col in self.feature_columns]
+
+            # DataFrame으로 변환 (sklearn은 2D 배열을 요구)
+            X = pd.DataFrame([features], columns=self.feature_columns)
+
+            # 스케일링
+            X_scaled = self.ml_scaler.transform(X)
+
+            # 예측
+            predicted = self.ml_model.predict(X_scaled)[0]
+
+            # 예측값이 비정상적이면 현재가 기준으로 조정
+            if predicted <= 0 or predicted > current_price * 2:
+                logger.warning(f"⚠️ Abnormal ML prediction: {predicted:.2f}, adjusting to current price range")
+                predicted = current_price * 1.01  # 1% 상승으로 조정
+
+            return float(predicted)
+
+        except Exception as e:
+            logger.error(f"❌ ML prediction failed: {e}, falling back to current price")
+            return float(current_price)
 
     def _get_default_prediction(self, stock_code: str, stock_name: str) -> Dict:
         """기본 예측 결과 (데이터 부족 시)"""
