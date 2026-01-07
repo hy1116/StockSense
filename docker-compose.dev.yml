@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 데이터베이스
+  postgres:
+    image: postgres:15-alpine
+    container_name: stocksense-postgres-dev
+    environment:
+      POSTGRES_DB: stocksense
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 캐시
+  redis:
+    image: redis:7-alpine
+    container_name: stocksense-redis-dev
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # 백엔드 FastAPI (개발 모드 - hot reload)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: stocksense-backend-dev
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-1234}@postgres:5432/stocksense
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "8000:8000"
+    volumes:
+      # 소스 코드를 마운트하여 hot reload 활성화
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./models:/app/models
+      - ./data:/app/data
+      # Python 캐시 제외
+      - /app/app/__pycache__
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+
+  # 프론트엔드 React (개발 모드 - Vite dev server)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: stocksense-frontend-dev
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      # 소스 코드를 마운트하여 hot reload 활성화
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.js:/app/vite.config.js
+      # node_modules는 컨테이너 내부 것 사용
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: npm run dev -- --host
+    restart: unless-stopped
+
+volumes:
+  postgres_data_dev:
+    driver: local
+  redis_data_dev:
+    driver: local

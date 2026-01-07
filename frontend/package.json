@@ -10,23 +10,28 @@
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.62.11",
+    "axios": "^1.7.9",
+    "chart.js": "^4.5.1",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "chartjs-chart-financial": "^0.2.1",
+    "date-fns": "^4.1.0",
+    "dayjs": "^1.11.13",
     "react": "^18.3.1",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
-    "axios": "^1.7.9",
     "recharts": "^2.15.0",
-    "dayjs": "^1.11.13",
-    "@tanstack/react-query": "^5.62.11",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.5",
     "eslint": "^9.17.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",
-    "eslint-plugin-react-refresh": "^0.4.16"
+    "eslint-plugin-react-refresh": "^0.4.16",
+    "vite": "^6.0.5"
   }
 }

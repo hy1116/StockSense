@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
-from app.api import portfolio
+from app.api import portfolio, prediction
 from app.database import init_db, close_db
 
 # 로깅 설정
@@ -45,6 +45,7 @@ app.add_middleware(
 )
 
 app.include_router(portfolio.router)
+app.include_router(prediction.router)
 
 
 @app.get("/")

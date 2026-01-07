@@ -120,7 +120,21 @@
   border-color: #646cff;
 }
 
-/* 차트 테이블 */
+/* 차트 컨테이너 */
+.chart-container {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 1rem;
+  min-height: 400px;
+}
+
+.chart-container p {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 3rem;
+}
+
+/* 차트 테이블 (백업용, 현재 미사용) */
 .chart-table {
   width: 100%;
   border-collapse: collapse;

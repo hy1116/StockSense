@@ -183,14 +183,23 @@ async def get_stock_detail(
                     high=int(item.get("stck_hgpr", 0)),
                     low=int(item.get("stck_lwpr", 0)),
                     close=int(item.get("stck_clpr", 0)),
-                    volume=int(item.get("acml_vol", 0))
+                    volume=int(item.get("acml_vol", 0)),
                 ))
+                
+            output1 = chart_result.get("output1", {})
+            stock_name = output1.get("hts_kor_isnm", "")
+            basic_info.stock_name = stock_name  # 업데이트된 주식명 반영
 
         # 3. 주가 예측
         prediction_data = None
         if chart_result.get("rt_cd") == "0":
             output2 = chart_result.get("output2", [])
+            logger.info(f"Chart data for prediction - stock: {stock_code}, data_count: {len(output2)}")
+            if output2:
+                logger.info(f"First chart item keys: {list(output2[0].keys())}")
+                logger.info(f"First chart item sample: stck_clpr={output2[0].get('stck_clpr')}, stck_oprc={output2[0].get('stck_oprc')}")
             pred_result = predictor.predict_price(stock_code, stock_name, output2)
+            logger.info(f"Prediction result: current={pred_result.get('current_price')}, predicted={pred_result.get('predicted_price')}")
             prediction_data = PredictionResult(**pred_result)
 
         # 통합 응답
