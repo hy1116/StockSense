@@ -51,3 +51,10 @@ data/
 # OS
 .DS_Store
 Thumbs.db
+
+# claude
+.claude/settings.local.json
+
+# etc
+guide/
+scripts/
