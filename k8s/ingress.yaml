@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: stocksense-ingress
+  namespace: stocksense
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # 클라우드 환경에 따라 추가 annotations가 필요할 수 있습니다
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"  # HTTPS를 위한 예시
+spec:
+  ingressClassName: nginx  # Ingress Controller에 따라 변경하세요
+  rules:
+  - host: stocksense.example.com  # 실제 도메인으로 변경하세요
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 80
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 80
+  # HTTPS를 위한 TLS 설정 (선택사항)
+  # tls:
+  # - hosts:
+  #   - stocksense.example.com
+  #   secretName: stocksense-tls

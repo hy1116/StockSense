@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: stocksense
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: stocksense-backend:latest  # Docker 이미지를 빌드하고 레지스트리에 푸시한 후 여기에 이미지 경로를 입력하세요
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: stocksense-config
+              key: DATABASE_URL
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: stocksense-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: stocksense-config
+              key: REDIS_PORT
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: stocksense-secret
+              key: POSTGRES_PASSWORD
+        - name: LOG_DIR
+          value: "/app/logs"
+        volumeMounts:
+        - name: models-storage
+          mountPath: /app/models
+        - name: data-storage
+          mountPath: /app/data
+        - name: log-storage
+          mountPath: /app/logs
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 5
+      volumes:
+      - name: models-storage
+        persistentVolumeClaim:
+          claimName: models-pvc
+      - name: data-storage
+        persistentVolumeClaim:
+          claimName: data-pvc
+      - name: log-storage
+        persistentVolumeClaim:
+          claimName: backend-log-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: models-pvc
+  namespace: stocksense
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-pvc
+  namespace: stocksense
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+---
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backend-log-pvc
+  namespace: stocksense
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: stocksense
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 80
+    targetPort: 8000
+  type: NodePort
