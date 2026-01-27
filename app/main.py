@@ -5,6 +5,7 @@ import logging
 
 from app.api import portfolio, prediction
 from app.database import init_db, close_db
+from app.config import get_settings
 
 # 로깅 설정
 logging.basicConfig(
@@ -36,9 +37,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+settings = get_settings()
+cors_origins = settings.cors_origins.split(",") if settings.cors_origins != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

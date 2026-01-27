@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     redis_db: int = 0
     redis_password: str = ""
 
+    # CORS Configuration
+    cors_origins: str = "*"
+
     class Config:
         env_file = ".env"
         case_sensitive = False
