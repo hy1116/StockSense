@@ -4,7 +4,6 @@ metadata:
   name: stocksense-ingress
   namespace: stocksense
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
     # 클라우드 환경에 따라 추가 annotations가 필요할 수 있습니다
     # cert-manager.io/cluster-issuer: "letsencrypt-prod"  # HTTPS를 위한 예시
 spec:

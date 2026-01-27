@@ -17,7 +17,7 @@ spec:
       - name: backend
         image: stocksense-backend:latest  # Docker 이미지를 빌드하고 레지스트리에 푸시한 후 여기에 이미지 경로를 입력하세요
         imagePullPolicy: IfNotPresent
-        ports:
+        ports:  
         - containerPort: 8000
         env:
         - name: DATABASE_URL
@@ -121,4 +121,4 @@ spec:
   ports:
   - port: 80
     targetPort: 8000
-  type: NodePort
+  type: ClusterIP

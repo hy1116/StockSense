@@ -43,4 +43,4 @@ spec:
   ports:
   - port: 80
     targetPort: 80
-  type: LoadBalancer  # 클라우드 환경에서 외부 IP를 자동으로 할당받습니다
+  type: ClusterIP  # 클라우드 환경에서 외부 IP를 자동으로 할당받습니다
