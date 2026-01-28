@@ -38,7 +38,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: app/Dockerfile
     container_name: stocksense-backend
     env_file:
       - .env
@@ -57,6 +57,29 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+
+  # ML Worker (수동 실행: docker compose run ml-worker)
+  ml-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: stocksense-ml-worker
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:1234@postgres:5432/stocksense
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - ml
 
   # 프론트엔드 React + Nginx
   frontend:

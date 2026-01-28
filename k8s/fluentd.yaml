@@ -1,0 +1,132 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+  namespace: logging
+data:
+  fluent.conf: |
+    <match fluent.**>
+      @type null
+    </match>
+
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+      exclude_path ["/var/log/containers/*fluentd*.log"]
+      pos_file /fluentd/log/fluentd-docker.pos
+      tag kubernetes.*
+      read_from_head true
+      <parse>
+        @type json
+        time_key time
+        time_format %Y-%m-%dT%H:%M:%S.%NZ
+      </parse>
+    </source>
+
+    <filter kubernetes.**>
+      @type kubernetes_metadata
+    </filter>
+
+    <match **>
+      @type elasticsearch
+      host elasticsearch-master.logging.svc.cluster.local
+      port 9200
+      logstash_format true
+      logstash_prefix k8s-logs
+      include_tag_key true
+      <buffer>
+        @type file
+        path /fluentd/log/buffer
+        flush_interval 5s
+        retry_max_interval 30
+        chunk_limit_size 2M
+      </buffer>
+    </match>
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluentd
+  namespace: logging
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fluentd
+rules:
+- apiGroups: [""]
+  resources: ["pods", "namespaces"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluentd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fluentd
+subjects:
+- kind: ServiceAccount
+  name: fluentd
+  namespace: logging
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd
+  namespace: logging
+  labels:
+    app: fluentd
+spec:
+  selector:
+    matchLabels:
+      app: fluentd
+  template:
+    metadata:
+      labels:
+        app: fluentd
+    spec:
+      serviceAccountName: fluentd
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      containers:
+      - name: fluentd
+        image: fluent/fluentd-kubernetes-daemonset:v1.16-debian-elasticsearch8-1
+        env:
+        - name: FLUENT_ELASTICSEARCH_HOST
+          value: "elasticsearch-master.logging.svc.cluster.local"
+        - name: FLUENT_ELASTICSEARCH_PORT
+          value: "9200"
+        - name: FLUENT_ELASTICSEARCH_SCHEME
+          value: "http"
+        - name: FLUENT_ELASTICSEARCH_LOGSTASH_FORMAT
+          value: "true"
+        - name: FLUENT_ELASTICSEARCH_LOGSTASH_PREFIX
+          value: "k8s-logs"
+        volumeMounts:
+        - name: config
+          mountPath: /fluentd/etc/fluent.conf
+          subPath: fluent.conf
+        - name: varlog
+          mountPath: /var/log
+        - name: dockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        - name: buffer
+          mountPath: /fluentd/log
+      volumes:
+      - name: config
+        configMap:
+          name: fluentd-config
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: dockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+      - name: buffer
+        emptyDir: {}

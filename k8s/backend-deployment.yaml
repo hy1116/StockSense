@@ -40,15 +40,15 @@ spec:
             secretKeyRef:
               name: stocksense-secret
               key: POSTGRES_PASSWORD
-        - name: LOG_DIR
-          value: "/app/logs"
+        # - name: LOG_DIR
+        #   value: "/app/logs"
         volumeMounts:
         - name: models-storage
           mountPath: /app/models
         - name: data-storage
           mountPath: /app/data
-        - name: log-storage
-          mountPath: /app/logs
+        # - name: log-storage
+        #   mountPath: /app/logs
         livenessProbe:
           httpGet:
             path: /health
@@ -68,9 +68,9 @@ spec:
       - name: data-storage
         persistentVolumeClaim:
           claimName: data-pvc
-      - name: log-storage
-        persistentVolumeClaim:
-          claimName: backend-log-pvc
+      # - name: log-storage
+      #   persistentVolumeClaim:
+      #     claimName: backend-log-pvc
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
