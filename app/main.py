@@ -1,7 +1,12 @@
+from time import time
 from fastapi import FastAPI
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.concurrency import iterate_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+
+from h11 import Request
 
 from app.api import portfolio, prediction
 from app.database import init_db, close_db
@@ -10,10 +15,56 @@ from app.config import get_settings
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(message)s",
+    stream=sys.stdout
 )
+logger = logging.getLogger("api_logger")
 
-logger = logging.getLogger(__name__)
+app = FastAPI()
+
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # 1. Request 정보 추출
+        start_time = time.time()
+        url = request.url.path
+        method = request.method
+        headers = dict(request.headers)
+        
+        # Request Body 처리 (Body를 읽으면 스트림이 소비되므로 복사본 생성 필요)
+        body = await request.body()
+        request_body = body.decode() if body else None
+
+        # 2. 다음 핸들러(API 로직) 실행
+        response = await call_next(request)
+
+        # 3. Response 정보 추출
+        process_time = (time.time() - start_time) * 1000 # ms 단위
+        response_body = [section async for section in response.body_iterator]
+        response.body_iterator = iterate_in_threadpool(iter(response_body))
+        
+        status_code = response.status_code
+
+        # 4. 로그 출력 (JSON 형태로 찍으면 Kibana에서 검색하기 매우 편함)
+        log_dict = {
+            "url": url,
+            "method": method,
+            "status_code": status_code,
+            "process_time_ms": f"{process_time:.2f}",
+            "request": {
+                "headers": headers,
+                "body": request_body
+            },
+            "response": {
+                "body": response_body[0].decode() if response_body else None
+            }
+        }
+        
+        logger.info(log_dict)
+        
+        return response
+
+# 미들웨어 등록
+app.add_middleware(LoggingMiddleware)
 
 
 @asynccontextmanager
