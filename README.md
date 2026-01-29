@@ -17,6 +17,9 @@
 - PostgreSQL
 - Redis (캐싱)
 - 한국투자증권 Open API
+- EFK (elastic search + Fluentd + Kibana)
+- Argo를 통한 ML
+- Docker / K8S
 
 ### Frontend
 - React + Vite
