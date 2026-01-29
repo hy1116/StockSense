@@ -11,13 +11,10 @@ if sys.platform == "win32":
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-# 프로젝트 루트를 Python path에 추가
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 # .env 파일 로드
 load_dotenv()
 
-from app.services.kis_api import KISAPIClient
+from ml.kis_client import KISAPIClient
 import pandas as pd
 
 

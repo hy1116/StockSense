@@ -58,12 +58,13 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ML Worker (수동 실행: docker compose run ml-worker)
-  ml-worker:
+  # argo ML 파이프라인
+  argo:
     build:
       context: .
-      dockerfile: Dockerfile.worker
-    container_name: stocksense-ml-worker
+      dockerfile: ml/Dockerfile
+      network: host
+    image: stocksense-ml:latest
     env_file:
       - .env
     environment:

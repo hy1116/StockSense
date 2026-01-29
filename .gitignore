@@ -58,3 +58,6 @@ Thumbs.db
 # etc
 guide/
 scripts/
+
+# k8s
+secrets.yaml

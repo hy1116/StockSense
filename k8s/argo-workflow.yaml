@@ -1,0 +1,122 @@
+# Argo ML Pipeline - ServiceAccount, RBAC, PVC, CronWorkflow 통합
+---
+# ML 데이터 저장용 PVC (수집 → 전처리 → 학습 간 데이터 공유)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-data-pvc
+  namespace: stocksense
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-workflow
+  namespace: stocksense
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-workflow-role
+  namespace: stocksense
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+- apiGroups: ["argoproj.io"]
+  resources: ["workflows", "workflowtaskresults"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-workflow-binding
+  namespace: stocksense
+subjects:
+- kind: ServiceAccount
+  name: argo-workflow
+  namespace: stocksense
+roleRef:
+  kind: Role
+  name: argo-workflow-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: ml-pipeline-daily
+  namespace: stocksense
+spec:
+  schedule: "42 * * * *"
+  timezone: "Asia/Seoul"
+  concurrencyPolicy: Forbid
+  workflowSpec:
+    serviceAccountName: argo-workflow
+    entrypoint: ml-steps
+    # 모든 Pod에서 공유할 볼륨 정의
+    volumes:
+    - name: ml-data
+      persistentVolumeClaim:
+        claimName: ml-data-pvc
+    templates:
+    - name: ml-steps
+      steps:
+      - - name: historical-data
+          template: run-task
+          arguments: { parameters: [{name: cmd, value: "python -m ml.collect_historical_data"}] }
+      - - name: data-ingestion
+          template: run-task
+          arguments: { parameters: [{name: cmd, value: "python -m ml.collect_daily_data"}] }
+      - - name: preprocessing
+          template: run-task
+          arguments: { parameters: [{name: cmd, value: "python -m ml.preprocess_data"}] }
+      - - name: training
+          template: run-task
+          arguments: { parameters: [{name: cmd, value: "python -m ml.train_model"}] }
+
+    - name: run-task
+      inputs:
+        parameters: [{name: cmd}]
+      container:
+        image: stocksense-ml:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args: ["{{inputs.parameters.cmd}}"]
+        env:
+        - name: TZ
+          value: "Asia/Seoul"
+        - name: KIS_APP_KEY
+          valueFrom:
+            secretKeyRef:
+              name: stocksense-secret
+              key: KIS_APP_KEY
+        - name: KIS_APP_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: stocksense-secret
+              key: KIS_APP_SECRET
+        - name: KIS_ACCOUNT_NUMBER
+          valueFrom:
+            secretKeyRef:
+              name: stocksense-secret
+              key: KIS_ACCOUNT_NUMBER
+        - name: KIS_ACCOUNT_PRODUCT_CODE
+          valueFrom:
+            secretKeyRef:
+              name: stocksense-secret
+              key: KIS_ACCOUNT_PRODUCT_CODE
+        - name: KIS_USE_MOCK
+          value: "True"
+        - name: KIS_BASE_URL
+          value: "https://openapi.koreainvestment.com:9443"
+        volumeMounts:
+        - name: ml-data
+          mountPath: /app/data

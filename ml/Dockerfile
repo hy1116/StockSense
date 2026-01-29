@@ -10,10 +10,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY ml/ ./ml/
 
 RUN mkdir -p /app/models /app/data
 
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
-CMD ["python", "scripts/ml/run_pipeline.py"]
+#CMD ["python", "scripts/ml/run_pipeline.py"]
