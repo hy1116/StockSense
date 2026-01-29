@@ -127,6 +127,9 @@ class HistoricalDataCollector:
 
             df = pd.DataFrame(data)
 
+            # 종목코드 형식 맞추기
+            df["stock_code"] = df["stock_code"].apply(lambda x: f'="{x}"')
+
             # 날짜를 datetime으로 변환
             df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
 
