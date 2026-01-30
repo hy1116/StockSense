@@ -18,6 +18,7 @@ prophet==1.1.6
 sqlalchemy==2.0.36
 alembic==1.14.0
 psycopg2-binary==2.9.10
+psycopg2
 asyncpg==0.30.0
 aiosqlite==0.20.0
 
