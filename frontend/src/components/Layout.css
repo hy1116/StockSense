@@ -41,6 +41,53 @@
   background-color: rgba(100, 108, 255, 0.1);
 }
 
+/* ===== Auth Section ===== */
+.auth-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.account-info {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+  background: rgba(100, 108, 255, 0.1);
+  border-radius: 6px;
+}
+
+.auth-button {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.auth-button.login {
+  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
+  color: white;
+}
+
+.auth-button.login:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(100, 108, 255, 0.35);
+}
+
+.auth-button.logout {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid #444;
+}
+
+.auth-button.logout:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
 .main-content {
   flex: 1;
   max-width: 1280px;
@@ -56,6 +103,55 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .header {
+    padding: 0.75rem 1rem;
+  }
+
+  .header-content {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .logo {
+    font-size: 1.25rem;
+  }
+
+  .nav {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .nav a {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .auth-section {
+    gap: 0.5rem;
+  }
+
+  .account-info {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .auth-button {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .account-info {
+    display: none;
+  }
+}
+
+/* ===== Light Mode ===== */
 @media (prefers-color-scheme: light) {
   .header,
   .footer {
@@ -63,6 +159,21 @@
   }
 
   .nav a {
+    color: #213547;
+  }
+
+  .account-info {
+    color: rgba(33, 53, 71, 0.7);
+    background: rgba(100, 108, 255, 0.08);
+  }
+
+  .auth-button.logout {
+    color: rgba(33, 53, 71, 0.7);
+    border-color: #ddd;
+  }
+
+  .auth-button.logout:hover {
+    background: rgba(0, 0, 0, 0.05);
     color: #213547;
   }
 }

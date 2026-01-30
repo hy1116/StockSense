@@ -1,7 +1,29 @@
-import { Outlet, Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Outlet, Link, useNavigate } from 'react-router-dom'
 import './Layout.css'
 
 function Layout() {
+  const navigate = useNavigate()
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [accountNo, setAccountNo] = useState('')
+
+  useEffect(() => {
+    // 로그인 상태 확인
+    const credentials = localStorage.getItem('kis_credentials')
+    if (credentials) {
+      const parsed = JSON.parse(credentials)
+      setIsLoggedIn(parsed.isLoggedIn)
+      setAccountNo(parsed.accountNo || '')
+    }
+  }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem('kis_credentials')
+    setIsLoggedIn(false)
+    setAccountNo('')
+    navigate('/')
+  }
+
   return (
     <div className="layout">
       <header className="header">
@@ -12,6 +34,20 @@ function Layout() {
             <Link to="/portfolio">포트폴리오</Link>
             <Link to="/prediction">예측</Link>
           </nav>
+          <div className="auth-section">
+            {isLoggedIn ? (
+              <>
+                <span className="account-info">{accountNo}</span>
+                <button onClick={handleLogout} className="auth-button logout">
+                  로그아웃
+                </button>
+              </>
+            ) : (
+              <Link to="/login" className="auth-button login">
+                로그인
+              </Link>
+            )}
+          </div>
         </div>
       </header>
       <main className="main-content">

@@ -4,11 +4,13 @@ import Home from './pages/Home'
 import StockDetail from './pages/StockDetail'
 import Prediction from './pages/Prediction'
 import Portfolio from './pages/Portfolio'
+import Login from './pages/Login'
 import './App.css'
 
 function App() {
   return (
     <Routes>
+      <Route path="/login" element={<Login />} />
       <Route path="/" element={<Layout />}>
         <Route index element={<Home />} />
         <Route path="stock/:symbol" element={<StockDetail />} />
