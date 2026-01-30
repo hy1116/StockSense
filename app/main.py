@@ -15,8 +15,7 @@ from app.config import get_settings
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
-    format="%(message)s",
-    stream=sys.stdout
+    format="%(message)s"
 )
 logger = logging.getLogger("api_logger")
 

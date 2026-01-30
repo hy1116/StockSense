@@ -19,8 +19,8 @@ RUN npm run build
 # 프로덕션 스테이지 - Nginx로 서빙
 FROM nginx:alpine
 
-# Nginx 설정 파일 복사
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Nginx 설정 파일 복사 (SPA 라우팅 지원)
+COPY nginx.docker.conf /etc/nginx/conf.d/default.conf
 
 # 빌드된 파일을 Nginx로 복사
 COPY --from=build /app/dist /usr/share/nginx/html
