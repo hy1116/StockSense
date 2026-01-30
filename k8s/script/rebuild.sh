@@ -20,7 +20,7 @@ error() { echo -e "${RED}❌ $1${NC}"; }
 
 # 스크립트 위치 확인
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 cd "$PROJECT_ROOT"
 
 echo ""
@@ -190,22 +190,9 @@ echo "🔹 Services:"
 kubectl get svc -n stocksense
 
 echo ""
-echo "🔹 Jobs:"
-kubectl get jobs -n stocksense
-
-echo ""
 echo "🔹 CronWorkflows:"
-kubectl get cronworkflows -n stocksense 2>/dev/null || echo "   No CronWorkflows found"
+kubectl get cronworkflows -n stocksense 2>/dev/null || echo "   No CronWorkflows found
 
 echo ""
-echo "=============================================="
-echo -e "${GREEN}🎉 StockSense deployment completed!${NC}"
-echo "=============================================="
-echo ""
-echo "📌 Useful commands:"
-echo "   kubectl logs -f deployment/backend -n stocksense    # Backend logs"
-echo "   kubectl logs -f deployment/frontend -n stocksense   # Frontend logs"
-echo "   kubectl logs job/db-migration -n stocksense         # Migration logs"
-echo "   kubectl logs job/init-collection-stocks -n stocksense  # Init stocks logs"
-echo "   argo list -n stocksense                             # Argo workflows"
-echo ""
+echo "🔹 Workflows:"
+kubectl get workflows -n stocksense 2>/dev/null || echo "   No Workflows found"
