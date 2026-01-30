@@ -305,6 +305,59 @@
   color: #60a5fa !important;
 }
 
+/* ===== Holdings Tab Styles ===== */
+.holdings-header,
+.holdings-item {
+  grid-template-columns: 60px 1fr 120px 100px 100px !important;
+}
+
+.col-quantity {
+  font-size: 0.9rem;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+}
+
+.empty-holdings {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  background: #1a1a1a;
+  border-radius: 12px;
+  border: 1px solid #2a2a2a;
+  text-align: center;
+}
+
+.empty-holdings .empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.empty-holdings p {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.go-trade-btn {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
+  color: white;
+  text-decoration: none;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.go-trade-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(100, 108, 255, 0.35);
+}
+
 /* ===== Features Section ===== */
 .features {
   margin: 3rem 0 2rem;
@@ -386,9 +439,15 @@
     grid-template-columns: 50px 1fr 90px 70px 80px;
   }
 
+  .holdings-header,
+  .holdings-item {
+    grid-template-columns: 50px 1fr 90px 70px 70px !important;
+  }
+
   .col-price,
   .col-change,
-  .col-marketcap {
+  .col-marketcap,
+  .col-quantity {
     font-size: 0.8rem;
   }
 
@@ -432,6 +491,16 @@
     grid-template-columns: 40px 1fr 80px;
   }
 
+  .holdings-header,
+  .holdings-item {
+    grid-template-columns: 40px 1fr 80px 60px !important;
+  }
+
+  .holdings-header .col-change,
+  .holdings-item .col-change {
+    display: none;
+  }
+
   .col-change,
   .col-marketcap {
     display: none;
@@ -448,6 +517,16 @@
   .tab-button {
     flex: 1;
     text-align: center;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.8rem;
+  }
+
+  .empty-holdings {
+    padding: 2rem 1rem;
+  }
+
+  .empty-holdings .empty-icon {
+    font-size: 2.5rem;
   }
 }
 
@@ -519,5 +598,18 @@
 
   .feature-card h3 {
     color: #213547;
+  }
+
+  .col-quantity {
+    color: rgba(33, 53, 71, 0.8);
+  }
+
+  .empty-holdings {
+    background: #f8f9fa;
+    border-color: #e0e0e0;
+  }
+
+  .empty-holdings p {
+    color: rgba(33, 53, 71, 0.5);
   }
 }

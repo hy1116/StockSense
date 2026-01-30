@@ -6,7 +6,7 @@ import './Home.css'
 
 function Home() {
   const [searchTerm, setSearchTerm] = useState('')
-  const [activeTab, setActiveTab] = useState('volume') // 'volume' | 'marketCap'
+  const [activeTab, setActiveTab] = useState('volume') // 'volume' | 'marketCap' | 'holdings'
 
   const { data: health, isLoading } = useQuery({
     queryKey: ['health'],
@@ -136,45 +136,97 @@ function Home() {
             >
               시가총액 상위
             </button>
+            <button
+              className={`tab-button ${activeTab === 'holdings' ? 'active' : ''}`}
+              onClick={() => setActiveTab('holdings')}
+            >
+              보유 종목
+            </button>
           </div>
         </div>
 
-        {isLoadingCurrentStocks ? (
-          <div className="loading">종목 정보를 불러오는 중...</div>
-        ) : currentStocks ? (
-          <div className="stock-list">
-            <div className="stock-list-header">
-              <span className="col-rank">순위</span>
-              <span className="col-name">종목명</span>
-              <span className="col-price">현재가</span>
-              <span className="col-change">등락률</span>
-              {activeTab === 'marketCap' && <span className="col-marketcap">시가총액</span>}
+        {/* 거래량/시총 상위 탭 */}
+        {(activeTab === 'volume' || activeTab === 'marketCap') && (
+          isLoadingCurrentStocks ? (
+            <div className="loading">종목 정보를 불러오는 중...</div>
+          ) : currentStocks ? (
+            <div className="stock-list">
+              <div className="stock-list-header">
+                <span className="col-rank">순위</span>
+                <span className="col-name">종목명</span>
+                <span className="col-price">현재가</span>
+                <span className="col-change">등락률</span>
+                {activeTab === 'marketCap' && <span className="col-marketcap">시가총액</span>}
+              </div>
+              {currentStocks.map((stock) => (
+                <Link
+                  key={stock.stock_code}
+                  to={`/stock/${stock.stock_code}`}
+                  className="stock-list-item"
+                >
+                  <span className="col-rank">
+                    <span className="rank-badge">{stock.rank}</span>
+                  </span>
+                  <span className="col-name">
+                    <span className="stock-name">{stock.stock_name}</span>
+                    <span className="stock-code">{stock.stock_code}</span>
+                  </span>
+                  <span className="col-price">{formatNumber(stock.current_price)}원</span>
+                  <span className={`col-change ${getPriceChangeClass(stock.change_rate)}`}>
+                    {stock.change_rate > 0 ? '+' : ''}{stock.change_rate.toFixed(2)}%
+                  </span>
+                  {activeTab === 'marketCap' && (
+                    <span className="col-marketcap">{formatMarketCap(stock.market_cap)}</span>
+                  )}
+                </Link>
+              ))}
             </div>
-            {currentStocks.map((stock) => (
-              <Link
-                key={stock.stock_code}
-                to={`/stock/${stock.stock_code}`}
-                className="stock-list-item"
-              >
-                <span className="col-rank">
-                  <span className="rank-badge">{stock.rank}</span>
-                </span>
-                <span className="col-name">
-                  <span className="stock-name">{stock.stock_name}</span>
-                  <span className="stock-code">{stock.stock_code}</span>
-                </span>
-                <span className="col-price">{formatNumber(stock.current_price)}원</span>
-                <span className={`col-change ${getPriceChangeClass(stock.change_rate)}`}>
-                  {stock.change_rate > 0 ? '+' : ''}{stock.change_rate.toFixed(2)}%
-                </span>
-                {activeTab === 'marketCap' && (
-                  <span className="col-marketcap">{formatMarketCap(stock.market_cap)}</span>
-                )}
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="error">종목 정보를 불러올 수 없습니다</div>
+          ) : (
+            <div className="error">종목 정보를 불러올 수 없습니다</div>
+          )
+        )}
+
+        {/* 보유 종목 탭 */}
+        {activeTab === 'holdings' && (
+          isLoadingPortfolio ? (
+            <div className="loading">보유 종목을 불러오는 중...</div>
+          ) : portfolio?.holdings && portfolio.holdings.length > 0 ? (
+            <div className="stock-list">
+              <div className="stock-list-header holdings-header">
+                <span className="col-rank">No.</span>
+                <span className="col-name">종목명</span>
+                <span className="col-price">현재가</span>
+                <span className="col-change">수익률</span>
+                <span className="col-quantity">보유수량</span>
+              </div>
+              {portfolio.holdings.map((holding, index) => (
+                <Link
+                  key={holding.stock_code}
+                  to={`/stock/${holding.stock_code}`}
+                  className="stock-list-item holdings-item"
+                >
+                  <span className="col-rank">
+                    <span className="rank-badge">{index + 1}</span>
+                  </span>
+                  <span className="col-name">
+                    <span className="stock-name">{holding.stock_name}</span>
+                    <span className="stock-code">{holding.stock_code}</span>
+                  </span>
+                  <span className="col-price">{formatNumber(holding.current_price)}원</span>
+                  <span className={`col-change ${getPriceChangeClass(holding.profit_rate)}`}>
+                    {holding.profit_rate > 0 ? '+' : ''}{holding.profit_rate.toFixed(2)}%
+                  </span>
+                  <span className="col-quantity">{formatNumber(holding.quantity)}주</span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-holdings">
+              <div className="empty-icon">📭</div>
+              <p>보유 종목이 없습니다</p>
+              <Link to="/portfolio" className="go-trade-btn">주문하러 가기</Link>
+            </div>
+          )
         )}
       </section>
 
