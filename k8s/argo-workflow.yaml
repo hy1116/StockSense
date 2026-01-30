@@ -61,6 +61,10 @@ spec:
   workflowSpec:
     serviceAccountName: argo-workflow
     entrypoint: ml-steps
+    ttlStrategy:
+      secondsAfterCompletion: 300 
+      secondsAfterSuccess: 60
+      secondsAfterFailure: 3600
     # 모든 Pod에서 공유할 볼륨 정의
     volumes:
     - name: ml-data

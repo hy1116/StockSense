@@ -87,29 +87,35 @@ kubectl wait --for=condition=ready pod -l app=redis -n stocksense --timeout=60s 
 success "Redis deployed"
 
 # ============================================
-# 5. DB 마이그레이션 실행
+# 5. DB 마이그레이션 실행 (Argo Workflow 버전)
 # ============================================
 echo ""
 echo "▶ [5/9] Running database migration..."
 
-# 기존 Job 삭제 (있으면)
-kubectl delete job db-migration -n stocksense --ignore-not-found=true
-kubectl delete job init-collection-stocks -n stocksense --ignore-not-found=true
+# 1. 새 워크플로우 생성 및 이름 캡처
+# generateName을 썼기 때문에 생성된 실제 이름을 변수에 담아야 합니다.
+WF_NAME=$(kubectl create -f k8s/db-migration-workflow.yaml -n stocksense -o name | cut -d'/' -f2)
 
-kubectl apply -f k8s/db-migration-job.yaml
-echo "   Waiting for migration to complete..."
-kubectl wait --for=condition=complete job/db-migration -n stocksense --timeout=180s || {
-    error "Migration failed! Check logs: kubectl logs job/db-migration -n stocksense"
+if [ -z "$WF_NAME" ]; then
+    error "Failed to create Workflow!"
+    exit 1
+fi
+
+echo "   Workflow '$WF_NAME' created. Waiting for completion..."
+
+# 2. Workflow 완료 대기 (argo CLI가 없을 때 kubectl로 상태 체크)
+# Argo Workflow는 status.phase가 'Succeeded'가 되어야 성공입니다.
+kubectl wait --for=jsonpath='{.status.phase}'=Succeeded workflow/$WF_NAME -n stocksense --timeout=60s || {
+    echo "------------------------------------------------"
+    echo "❌ MIGRATION ERROR LOGS:"
+    # 실패 시 로그 자동 출력
+    kubectl logs $WF_NAME -n stocksense -c migration-template
+    echo "------------------------------------------------"
+    error "Migration failed! Check Argo UI for details."
     exit 1
 }
-success "Database migration completed"
 
-# 수집 종목 초기화 대기
-echo "   Waiting for collection stocks initialization..."
-kubectl wait --for=condition=complete job/init-collection-stocks -n stocksense --timeout=120s || {
-    warn "Collection stocks init may have failed, check logs:"
-    warn "kubectl logs job/init-collection-stocks -n stocksense"
-}
+success "Database migration completed ($WF_NAME)"
 
 # ============================================
 # 6. Backend & Frontend 배포
