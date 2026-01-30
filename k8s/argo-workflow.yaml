@@ -69,6 +69,9 @@ spec:
     templates:
     - name: ml-steps
       steps:
+      - - name: init-collection-stocks
+          template: run-task
+          arguments: { parameters: [{name: cmd, value: "python -m ml.init_collection_stocks --init"}] }
       - - name: historical-data
           template: run-task
           arguments: { parameters: [{name: cmd, value: "python -m ml.collect_historical_data"}] }
@@ -93,6 +96,11 @@ spec:
         env:
         - name: TZ
           value: "Asia/Seoul"
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: stocksense-config
+              key: DATABASE_URL
         - name: KIS_APP_KEY
           valueFrom:
             secretKeyRef:
@@ -117,6 +125,16 @@ spec:
           value: "True"
         - name: KIS_BASE_URL
           value: "https://openapi.koreainvestment.com:9443"
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: stocksense-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: stocksense-config
+              key: REDIS_PORT
         volumeMounts:
         - name: ml-data
           mountPath: /app/data

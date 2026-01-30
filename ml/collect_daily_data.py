@@ -15,6 +15,7 @@ if sys.platform == "win32":
 load_dotenv()
 
 from ml.kis_client import KISAPIClient
+from ml.stock_repository import StockRepository
 import pandas as pd
 
 
@@ -55,19 +56,26 @@ class DailyDataCollector:
             cust_type=cust_type,
         )
 
-        # 주요 종목 코드
-        self.major_stocks = [
-            "005930",  # 삼성전자
-            "000660",  # SK하이닉스
-            "035420",  # NAVER
-            "051910",  # LG화학
-            "005380",  # 현대차
-            "006400",  # 삼성SDI
-            "035720",  # 카카오
-            "000270",  # 기아
-            "207940",  # 삼성바이오로직스
-            "068270",  # 셀트리온
-        ]
+        # DB에서 수집 대상 종목 조회
+        self._load_stocks_from_db()
+
+    def _load_stocks_from_db(self):
+        """DB에서 수집 대상 종목 로드"""
+        try:
+            repo = StockRepository()
+            self.major_stocks = repo.get_stock_codes()
+            print(f"📋 Loaded {len(self.major_stocks)} stocks from database")
+        except Exception as e:
+            print(f"⚠️  Failed to load stocks from DB: {e}")
+            print("⚠️  Using fallback stock list")
+            # DB 연결 실패 시 기본 종목 사용
+            self.major_stocks = [
+                "005930",  # 삼성전자
+                "000660",  # SK하이닉스
+                "035420",  # NAVER
+                "051910",  # LG화학
+                "005380",  # 현대차
+            ]
 
     def collect_today_data(self, stock_code: str) -> dict:
         """오늘의 주가 데이터 수집"""

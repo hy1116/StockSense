@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 load_dotenv()
 
 from ml.kis_client import KISAPIClient
+from ml.stock_repository import StockRepository
 import pandas as pd
 
 
@@ -60,24 +61,26 @@ class HistoricalDataCollector:
             cust_type=cust_type,
         )
 
-        # 주요 종목 코드 (KOSPI 시가총액 상위)
-        self.major_stocks = [
-            "005930",  # 삼성전자
-            "000660",  # SK하이닉스
-            "035420",  # NAVER
-            "051910",  # LG화학
-            "005380",  # 현대차
-            "006400",  # 삼성SDI
-            "035720",  # 카카오
-            "000270",  # 기아
-            "207940",  # 삼성바이오로직스
-            "068270",  # 셀트리온
-            "028260",  # 삼성물산
-            "105560",  # KB금융
-            "055550",  # 신한지주
-            "012330",  # 현대모비스
-            "066570",  # LG전자
-        ]
+        # DB에서 수집 대상 종목 조회
+        self._load_stocks_from_db()
+
+    def _load_stocks_from_db(self):
+        """DB에서 수집 대상 종목 로드"""
+        try:
+            repo = StockRepository()
+            self.major_stocks = repo.get_stock_codes()
+            print(f"📋 Loaded {len(self.major_stocks)} stocks from database")
+        except Exception as e:
+            print(f"⚠️  Failed to load stocks from DB: {e}")
+            print("⚠️  Using fallback stock list")
+            # DB 연결 실패 시 기본 종목 사용
+            self.major_stocks = [
+                "005930",  # 삼성전자
+                "000660",  # SK하이닉스
+                "035420",  # NAVER
+                "051910",  # LG화학
+                "005380",  # 현대차
+            ]
 
     def collect_stock_data(self, stock_code: str, days: int = 365) -> pd.DataFrame:
         """특정 종목의 과거 데이터 수집
