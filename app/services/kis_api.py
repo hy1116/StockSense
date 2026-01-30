@@ -328,6 +328,46 @@ class KISAPIClient:
         else:
             raise Exception(f"거래량 순위 조회 실패: {response.text}")
 
+    def get_market_cap_ranking(self, top_n: int = 30) -> Dict:
+        """시가총액 순위 조회
+
+        Args:
+            top_n: 조회할 상위 종목 수 (기본 30개)
+
+        Returns:
+            시가총액 상위 종목 목록
+        """
+        tr_id = "FHPST01740000"
+        url = f"{self.base_url}/uapi/domestic-stock/v1/ranking/market-cap"
+
+        headers = self._get_headers(tr_id)
+        params = {
+            "fid_cond_mrkt_div_code": "J",  # J: 주식
+            "fid_cond_scr_div_code": "20174",
+            "fid_input_iscd": "0000",  # 전체
+            "fid_div_cls_code": "0",  # 0: 전체
+            "fid_blng_cls_code": "0",
+            "fid_trgt_cls_code": "0",
+            "fid_trgt_exls_cls_code": "0",
+            "fid_input_price_1": "",
+            "fid_input_price_2": "",
+            "fid_vol_cnt": "",
+        }
+
+        self._log_request("GET", url, headers, params=params)
+        response = requests.get(url, headers=headers, params=params)
+
+        result = response.json() if response.status_code == 200 else {"error": response.text}
+        self._log_response("GET", url, response.status_code, result)
+
+        if response.status_code == 200:
+            # 상위 N개만 반환
+            if "output" in result:
+                result["output"] = result["output"][:top_n]
+            return result
+        else:
+            raise Exception(f"시가총액 순위 조회 실패: {response.text}")
+
     def get_order_history(self) -> Dict:
         """주문 내역 조회"""
         tr_id = "VTTC8001R" if self.use_mock else "TTTC8001R"

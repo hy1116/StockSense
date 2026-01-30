@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { getHealthCheck, getTopStocks, getPortfolio } from '../services/api'
+import { getHealthCheck, getTopStocks, getMarketCapStocks, getPortfolio } from '../services/api'
 import './Home.css'
 
 function Home() {
   const [searchTerm, setSearchTerm] = useState('')
+  const [activeTab, setActiveTab] = useState('volume') // 'volume' | 'marketCap'
 
   const { data: health, isLoading } = useQuery({
     queryKey: ['health'],
@@ -14,19 +15,34 @@ function Home() {
 
   const { data: topStocksData, isLoading: isLoadingStocks } = useQuery({
     queryKey: ['topStocks'],
-    queryFn: () => getTopStocks(8),
-    refetchInterval: 60000, // 1분마다 새로고침
+    queryFn: () => getTopStocks(10),
+    refetchInterval: 60000,
+  })
+
+  const { data: marketCapData, isLoading: isLoadingMarketCap } = useQuery({
+    queryKey: ['marketCapStocks'],
+    queryFn: () => getMarketCapStocks(10),
+    refetchInterval: 60000,
   })
 
   const { data: portfolio, isLoading: isLoadingPortfolio } = useQuery({
     queryKey: ['portfolio'],
     queryFn: getPortfolio,
-    refetchInterval: 300000, // 5분마다 새로고침
+    refetchInterval: 300000,
   })
 
   const formatNumber = (num) => {
     if (!num) return '0'
     return num.toLocaleString('ko-KR')
+  }
+
+  const formatMarketCap = (num) => {
+    if (!num) return '-'
+    const 억 = Math.floor(num / 100000000)
+    if (억 >= 10000) {
+      return `${(억 / 10000).toFixed(1)}조`
+    }
+    return `${formatNumber(억)}억`
   }
 
   const getPriceChangeClass = (change) => {
@@ -42,13 +58,16 @@ function Home() {
     }
   }
 
+  const currentStocks = activeTab === 'volume' ? topStocksData?.stocks : marketCapData?.stocks
+  const isLoadingCurrentStocks = activeTab === 'volume' ? isLoadingStocks : isLoadingMarketCap
+
   return (
     <div className="home">
       <section className="hero">
         <h1>StockSense</h1>
         <p>AI 기반 주식 예측 및 분석 시스템</p>
         {!isLoading && health && (
-          <p className="status">서버 상태: {health.status}</p>
+          <span className="status-badge">서버 정상</span>
         )}
       </section>
 
@@ -101,31 +120,56 @@ function Home() {
         )}
       </section>
 
-      <section className="popular-stocks">
-        <h2>거래량 상위 종목</h2>
-        {isLoadingStocks ? (
+      {/* 상위 종목 섹션 - 탭 형태 */}
+      <section className="ranking-section">
+        <div className="ranking-header">
+          <div className="tab-buttons">
+            <button
+              className={`tab-button ${activeTab === 'volume' ? 'active' : ''}`}
+              onClick={() => setActiveTab('volume')}
+            >
+              거래량 상위
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'marketCap' ? 'active' : ''}`}
+              onClick={() => setActiveTab('marketCap')}
+            >
+              시가총액 상위
+            </button>
+          </div>
+        </div>
+
+        {isLoadingCurrentStocks ? (
           <div className="loading">종목 정보를 불러오는 중...</div>
-        ) : topStocksData?.stocks ? (
-          <div className="stock-grid">
-            {topStocksData.stocks.map((stock) => (
+        ) : currentStocks ? (
+          <div className="stock-list">
+            <div className="stock-list-header">
+              <span className="col-rank">순위</span>
+              <span className="col-name">종목명</span>
+              <span className="col-price">현재가</span>
+              <span className="col-change">등락률</span>
+              {activeTab === 'marketCap' && <span className="col-marketcap">시가총액</span>}
+            </div>
+            {currentStocks.map((stock) => (
               <Link
                 key={stock.stock_code}
                 to={`/stock/${stock.stock_code}`}
-                className="stock-card"
+                className="stock-list-item"
               >
-                <div className="stock-rank">#{stock.rank}</div>
-                <h3>{stock.stock_name}</h3>
-                <div className="stock-price">
-                  {formatNumber(stock.current_price)}원
-                </div>
-                <div className={`stock-change ${getPriceChangeClass(stock.change_rate)}`}>
-                  {stock.change_rate > 0 ? '+' : ''}
-                  {stock.change_rate.toFixed(2)}%
-                </div>
-                {/* <div className="stock-market-cap">
-                  거래량 순위: {stock.market_cap}
-                </div> */}
-                <div className="stock-code">{stock.stock_code}</div>
+                <span className="col-rank">
+                  <span className="rank-badge">{stock.rank}</span>
+                </span>
+                <span className="col-name">
+                  <span className="stock-name">{stock.stock_name}</span>
+                  <span className="stock-code">{stock.stock_code}</span>
+                </span>
+                <span className="col-price">{formatNumber(stock.current_price)}원</span>
+                <span className={`col-change ${getPriceChangeClass(stock.change_rate)}`}>
+                  {stock.change_rate > 0 ? '+' : ''}{stock.change_rate.toFixed(2)}%
+                </span>
+                {activeTab === 'marketCap' && (
+                  <span className="col-marketcap">{formatMarketCap(stock.market_cap)}</span>
+                )}
               </Link>
             ))}
           </div>
@@ -138,14 +182,17 @@ function Home() {
         <h2>주요 기능</h2>
         <div className="feature-grid">
           <div className="feature-card">
+            <div className="feature-icon">📊</div>
             <h3>실시간 데이터</h3>
             <p>주요 주식 시장의 실시간 데이터 제공</p>
           </div>
           <div className="feature-card">
+            <div className="feature-icon">🤖</div>
             <h3>AI 예측</h3>
             <p>머신러닝 기반 주가 예측</p>
           </div>
           <div className="feature-card">
+            <div className="feature-icon">📈</div>
             <h3>차트 분석</h3>
             <p>다양한 기술적 지표 시각화</p>
           </div>

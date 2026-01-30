@@ -333,9 +333,68 @@ async def get_order_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/market-cap-stocks", response_model=TopStocksResponse)
+async def get_market_cap_stocks(
+    limit: int = Query(default=10, ge=1, le=30, description="조회할 종목 수"),
+    client: KISAPIClient = Depends(get_kis_client)
+):
+    """시가총액 상위 종목 조회 (Redis 캐시 10분)"""
+    try:
+        redis = get_redis_client()
+        cache_key = f"top_market_cap_stocks:limit_{limit}"
+
+        # 1. Redis 캐시 확인
+        if redis.is_available():
+            cached_data = redis.get(cache_key)
+            if cached_data:
+                try:
+                    cached_dict = json.loads(cached_data)
+                    return TopStocksResponse(**cached_dict)
+                except Exception:
+                    pass
+
+        # 2. KIS API 호출 (시가총액 순위)
+        result = client.get_market_cap_ranking(top_n=limit)
+
+        if result.get("rt_cd") != "0":
+            raise HTTPException(
+                status_code=400,
+                detail=f"시가총액 순위 조회 실패: {result.get('msg1', 'Unknown error')}"
+            )
+
+        output = result.get("output", [])
+
+        stocks = []
+        for idx, item in enumerate(output[:limit], start=1):
+            stock = TopStock(
+                rank=idx,
+                stock_code=item.get("mksc_shrn_iscd", ""),
+                stock_name=item.get("hts_kor_isnm", ""),
+                current_price=int(item.get("stck_prpr", 0)),
+                change_rate=float(item.get("prdy_ctrt", 0)),
+                market_cap=int(item.get("stck_avls", 0)) if item.get("stck_avls") else 0
+            )
+            stocks.append(stock)
+
+        response = TopStocksResponse(stocks=stocks)
+
+        # 3. Redis에 캐싱 (10분 = 600초)
+        if redis.is_available():
+            try:
+                cache_data = json.dumps(response.model_dump())
+                redis.set(cache_key, cache_data, expire=600)
+            except Exception:
+                pass
+
+        return response
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/top-stocks", response_model=TopStocksResponse)
 async def get_top_stocks(
-    limit: int = Query(default=8, ge=1, le=30, description="조회할 종목 수"),
+    limit: int = Query(default=10, ge=1, le=30, description="조회할 종목 수"),
     client: KISAPIClient = Depends(get_kis_client)
 ):
     """거래량 상위 종목 조회 (Redis 캐시 10분)"""

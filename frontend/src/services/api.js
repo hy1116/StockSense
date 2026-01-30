@@ -55,8 +55,15 @@ export const getOrderHistory = async () => {
   return response.data
 }
 
-export const getTopStocks = async (limit = 8) => {
+export const getTopStocks = async (limit = 10) => {
   const response = await api.get('/api/portfolio/top-stocks', {
+    params: { limit }
+  })
+  return response.data
+}
+
+export const getMarketCapStocks = async (limit = 10) => {
+  const response = await api.get('/api/portfolio/market-cap-stocks', {
     params: { limit }
   })
   return response.data

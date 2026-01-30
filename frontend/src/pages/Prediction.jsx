@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import './Prediction.css'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 function Prediction() {
   const [stockCode, setStockCode] = useState('')
@@ -22,7 +22,7 @@ function Prediction() {
     setPrediction(null)
 
     try {
-      const url = `${API_BASE_URL}/api/prediction/`
+      const url = "/api/prediction/"
       console.log('🚀 Calling API:', url, 'with stock_code:', stockCode.toUpperCase())
 
       const response = await fetch(url, {
