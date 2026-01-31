@@ -8,7 +8,7 @@ metadata:
 spec:
   entrypoint: migration-entry # 실행 시작점 정의
   
-  serviceAccountName: argo-workflow
+  serviceAccountName: default
     
   # Argo 전용 TTL 전략 (성공/실패 분기)
   ttlStrategy:
@@ -35,7 +35,8 @@ spec:
   - name: run-alembic
     container:
       image: stocksense-backend:latest
-      imagePullPolicy: IfNotPresent
+      imagePullPolicy: Never
+      workingDir: /app
       command: ["alembic", "upgrade", "head"]
       env:
       - name: DATABASE_URL
@@ -48,6 +49,8 @@ spec:
           secretKeyRef:
             name: stocksense-secret
             key: POSTGRES_PASSWORD
+      - name: PYTHONPATH
+        value: "/app"
       resources:
         requests:
           memory: "128Mi"

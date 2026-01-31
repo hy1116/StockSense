@@ -16,7 +16,7 @@ spec:
       containers:
       - name: backend
         image: stocksense-backend:latest  # Docker 이미지를 빌드하고 레지스트리에 푸시한 후 여기에 이미지 경로를 입력하세요
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Never
         ports:  
         - containerPort: 8000
         env:
@@ -40,15 +40,11 @@ spec:
             secretKeyRef:
               name: stocksense-secret
               key: POSTGRES_PASSWORD
-        # - name: LOG_DIR
-        #   value: "/app/logs"
         volumeMounts:
         - name: models-storage
           mountPath: /app/models
         - name: data-storage
           mountPath: /app/data
-        # - name: log-storage
-        #   mountPath: /app/logs
         livenessProbe:
           httpGet:
             path: /health
@@ -79,7 +75,8 @@ metadata:
   namespace: stocksense
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
+  storageClassName: local-path
   resources:
     requests:
       storage: 2Gi
@@ -91,20 +88,8 @@ metadata:
   namespace: stocksense
 spec:
   accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: 2Gi
----
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: backend-log-pvc
-  namespace: stocksense
-spec:
-  accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
+  storageClassName: local-path
   resources:
     requests:
       storage: 2Gi

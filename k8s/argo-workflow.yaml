@@ -59,7 +59,7 @@ spec:
   timezone: "Asia/Seoul"
   concurrencyPolicy: Forbid
   workflowSpec:
-    serviceAccountName: argo-workflow
+    serviceAccountName: default
     entrypoint: ml-steps
     ttlStrategy:
       secondsAfterCompletion: 300 

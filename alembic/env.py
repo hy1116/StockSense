@@ -11,7 +11,7 @@ from alembic import context
 # 애플리케이션 설정 및 모델 임포트
 from app.config import get_settings
 from app.database import Base
-from app.models import stock  # 모든 모델 임포트
+# from app.models import stock  # 모든 모델 임포트 (마이그레이션 파일에 직접 정의됨)
 
 # Alembic Config 객체
 config = context.config
