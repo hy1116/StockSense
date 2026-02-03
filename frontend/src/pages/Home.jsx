@@ -6,7 +6,7 @@ import './Home.css'
 
 function Home() {
   const [searchTerm, setSearchTerm] = useState('')
-  const [activeTab, setActiveTab] = useState('volume') // 'volume' | 'marketCap' | 'holdings'
+  const [activeTab, setActiveTab] = useState('marketCap') // 'volume' | 'marketCap' | 'holdings'
 
   const { data: health, isLoading } = useQuery({
     queryKey: ['health'],
@@ -125,16 +125,16 @@ function Home() {
         <div className="ranking-header">
           <div className="tab-buttons">
             <button
-              className={`tab-button ${activeTab === 'volume' ? 'active' : ''}`}
-              onClick={() => setActiveTab('volume')}
-            >
-              거래량 상위
-            </button>
-            <button
               className={`tab-button ${activeTab === 'marketCap' ? 'active' : ''}`}
               onClick={() => setActiveTab('marketCap')}
             >
               시가총액 상위
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'volume' ? 'active' : ''}`}
+              onClick={() => setActiveTab('volume')}
+            >
+              거래량 상위
             </button>
             <button
               className={`tab-button ${activeTab === 'holdings' ? 'active' : ''}`}
