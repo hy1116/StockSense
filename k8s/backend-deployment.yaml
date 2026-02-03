@@ -64,9 +64,6 @@ spec:
       - name: data-storage
         persistentVolumeClaim:
           claimName: data-pvc
-      # - name: log-storage
-      #   persistentVolumeClaim:
-      #     claimName: backend-log-pvc
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -76,7 +73,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: local-path
+  # storageClassName: local-path
   resources:
     requests:
       storage: 2Gi
@@ -89,7 +86,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: local-path
+  # storageClassName: local-path
   resources:
     requests:
       storage: 2Gi

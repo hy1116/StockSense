@@ -1,4 +1,4 @@
-"""수집 종목 초기 데이터 설정 스크립트"""
+"""종목 데이터 초기화/동기화 스크립트"""
 import sys
 import argparse
 from pathlib import Path
@@ -10,17 +10,17 @@ from ml.stock_repository import StockRepository
 
 
 def main():
-    parser = argparse.ArgumentParser(description="수집 종목 초기 데이터 설정")
+    parser = argparse.ArgumentParser(description="종목 데이터 관리 (stocks 테이블)")
     parser.add_argument(
-        "--init",
+        "--sync",
         action="store_true",
-        help="시가총액 상위 종목 동기화 (KIS API에서 조회)",
+        help="시총/거래량 상위 종목을 stocks 테이블에 동기화",
     )
     parser.add_argument(
         "--top",
         type=int,
         default=30,
-        help="시가총액 상위 몇 개 종목을 수집할지 (기본: 30)",
+        help="상위 몇 개 종목을 수집할지 (기본: 30)",
     )
     parser.add_argument(
         "--add",
@@ -44,7 +44,7 @@ def main():
     parser.add_argument(
         "--list",
         action="store_true",
-        help="활성화된 수집 종목 목록 조회",
+        help="활성화된 종목 목록 조회",
     )
     parser.add_argument(
         "--market",
@@ -63,10 +63,10 @@ def main():
 
     repo = StockRepository()
 
-    if args.init:
-        print(f"\n🚀 Syncing top {args.top} market cap stocks from KIS API...")
-        count = repo.init_default_stocks(top_n=args.top)
-        print(f"\n✅ Synced {count} stocks")
+    if args.sync:
+        print(f"\n🔄 Syncing top {args.top} market cap + volume stocks...")
+        result = repo.sync_top_stocks(top_n=args.top)
+        print(f"\n✅ Synced {result['total']} stocks to stocks table")
 
     elif args.add:
         code, name = args.add
@@ -93,7 +93,7 @@ def main():
             print(f"❌ Failed to activate: {code}")
 
     elif args.list:
-        print("\n📋 Active collection stocks:")
+        print("\n📋 Active stocks:")
         print("-" * 60)
         stocks = repo.get_active_stocks()
         if stocks:
@@ -104,17 +104,17 @@ def main():
             print(f"Total: {len(stocks)} stocks")
         else:
             print("No active stocks found.")
-            print("\nRun with --init to initialize default stocks:")
-            print("  python -m ml.init_collection_stocks --init")
+            print("\nRun with --sync to sync stocks from KIS API:")
+            print("  python -m ml.init_collection_stocks --sync")
 
     else:
         parser.print_help()
         print("\n\nExamples:")
-        print("  # Sync top 30 market cap stocks from KIS API")
-        print("  python -m ml.init_collection_stocks --init")
+        print("  # Sync top 30 market cap + volume stocks")
+        print("  python -m ml.init_collection_stocks --sync")
         print()
-        print("  # Sync top 50 market cap stocks")
-        print("  python -m ml.init_collection_stocks --init --top 50")
+        print("  # Sync top 50 stocks")
+        print("  python -m ml.init_collection_stocks --sync --top 50")
         print()
         print("  # List active stocks")
         print("  python -m ml.init_collection_stocks --list")

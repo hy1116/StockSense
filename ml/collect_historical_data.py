@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # .env 파일 로드
 load_dotenv()
 
-from ml.kis_client import KISAPIClient
+from app.services.kis_api import KISAPIClient
 from ml.stock_repository import StockRepository
 import pandas as pd
 

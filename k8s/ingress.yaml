@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: nginx  # Ingress Controller에 따라 변경하세요
   rules:
-  - host: k8s.stocksense.co.kr  # 실제 도메인으로 변경하세요
+  - host: stocksense.hypepia.com  # 실제 도메인으로 변경하세요
     http:
       paths:
       - path: /api

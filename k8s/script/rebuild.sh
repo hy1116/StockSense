@@ -53,13 +53,14 @@ docker build -t stocksense-ml:latest -f ml/Dockerfile . || {
 success "ML image built"
 
 # ============================================
-# 2. 기본 리소스 생성 (Namespace, ConfigMap, Secret)
+# 2. 기본 리소스 생성 (Namespace, ConfigMap, Secret, RBAC)
 # ============================================
 echo ""
-echo "▶ [2/9] Creating namespace, configmap, secret..."
+echo "▶ [2/9] Creating namespace, configmap, secret, rbac..."
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/configmap.yaml
 kubectl apply -f k8s/secret.yaml
+kubectl apply -f k8s/argo-rbac.yaml
 success "Basic resources created"
 
 # ============================================
@@ -93,7 +94,6 @@ echo ""
 echo "▶ [5/9] Running database migration..."
 
 # 1. 새 워크플로우 생성 및 이름 캡처
-# generateName을 썼기 때문에 생성된 실제 이름을 변수에 담아야 합니다.
 WF_NAME=$(kubectl create -f k8s/db-migration-workflow.yaml -n stocksense -o name | cut -d'/' -f2)
 
 if [ -z "$WF_NAME" ]; then
@@ -103,19 +103,27 @@ fi
 
 echo "   Workflow '$WF_NAME' created. Waiting for completion..."
 
-# 2. Workflow 완료 대기 (argo CLI가 없을 때 kubectl로 상태 체크)
-# Argo Workflow는 status.phase가 'Succeeded'가 되어야 성공입니다.
-kubectl wait --for=jsonpath='{.status.phase}'=Succeeded workflow/$WF_NAME -n stocksense --timeout=60s || {
+# 2. Workflow 완료 대기 (타임아웃 120초로 증가)
+kubectl wait --for=jsonpath='{.status.phase}'=Succeeded workflow/$WF_NAME -n stocksense --timeout=120s || {
     echo "------------------------------------------------"
-    echo "❌ MIGRATION ERROR LOGS:"
-    # 실패 시 로그 자동 출력
-    kubectl logs $WF_NAME -n stocksense -c migration-template
+    echo "❌ MIGRATION WORKFLOW FAILED"
+    echo ""
+    echo "Workflow status:"
+    kubectl get workflow/$WF_NAME -n stocksense -o jsonpath='{.status.phase}'
+    echo ""
+    echo ""
+    echo "Workflow pods:"
+    kubectl get pods -n stocksense -l workflows.argoproj.io/workflow=$WF_NAME
+    echo ""
+    echo "Pod logs:"
+    # Argo Workflow Pod 이름 패턴으로 로그 조회
+    kubectl logs -n stocksense -l workflows.argoproj.io/workflow=$WF_NAME --all-containers=true --tail=50 2>/dev/null || echo "No logs available"
     echo "------------------------------------------------"
-    error "Migration failed! Check Argo UI for details."
+    error "Migration failed! Check logs above."
     exit 1
 }
 
-success "Database migration completed ($WF_NAME)"
+# success "Database migration completed ($WF_NAME)"
 
 # ============================================
 # 6. Backend & Frontend 배포
@@ -191,7 +199,7 @@ kubectl get svc -n stocksense
 
 echo ""
 echo "🔹 CronWorkflows:"
-kubectl get cronworkflows -n stocksense 2>/dev/null || echo "   No CronWorkflows found
+kubectl get cronworkflows -n stocksense 2>/dev/null || echo "   No CronWorkflows found"
 
 echo ""
 echo "🔹 Workflows:"

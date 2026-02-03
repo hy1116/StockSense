@@ -1,4 +1,4 @@
-"""수집 종목 관리를 위한 데이터베이스 Repository"""
+"""종목 관리를 위한 데이터베이스 Repository"""
 import os
 from typing import List, Optional
 from sqlalchemy import create_engine, text
@@ -9,7 +9,7 @@ load_dotenv()
 
 
 class StockRepository:
-    """수집 종목 DB 관리"""
+    """종목 DB 관리 (stocks 테이블 통합)"""
 
     def __init__(self):
         # 환경변수에서 DB URL 읽기 (동기 드라이버 사용)
@@ -35,7 +35,7 @@ class StockRepository:
             result = session.execute(
                 text("""
                     SELECT stock_code, stock_name, market, priority, description
-                    FROM collection_stocks
+                    FROM stocks
                     WHERE is_active = true
                     ORDER BY priority DESC, stock_code
                 """)
@@ -67,8 +67,9 @@ class StockRepository:
         market: str = None,
         priority: int = 0,
         description: str = None,
+        is_active: bool = True,
     ) -> bool:
-        """수집 종목 추가
+        """종목 추가/업데이트
 
         Args:
             stock_code: 종목 코드
@@ -76,6 +77,7 @@ class StockRepository:
             market: 시장 (KOSPI/KOSDAQ)
             priority: 우선순위
             description: 설명
+            is_active: 수집 활성화 여부
 
         Returns:
             bool: 성공 여부
@@ -84,16 +86,16 @@ class StockRepository:
             try:
                 session.execute(
                     text("""
-                        INSERT INTO collection_stocks
+                        INSERT INTO stocks
                         (stock_code, stock_name, market, priority, description, is_active)
-                        VALUES (:code, :name, :market, :priority, :desc, true)
+                        VALUES (:code, :name, :market, :priority, :desc, :is_active)
                         ON CONFLICT (stock_code)
                         DO UPDATE SET
                             stock_name = :name,
                             market = :market,
                             priority = :priority,
                             description = :desc,
-                            is_active = true,
+                            is_active = :is_active,
                             updated_at = NOW()
                     """),
                     {
@@ -102,6 +104,7 @@ class StockRepository:
                         "market": market,
                         "priority": priority,
                         "desc": description,
+                        "is_active": is_active,
                     }
                 )
                 session.commit()
@@ -124,7 +127,7 @@ class StockRepository:
             try:
                 session.execute(
                     text("""
-                        UPDATE collection_stocks
+                        UPDATE stocks
                         SET is_active = false, updated_at = NOW()
                         WHERE stock_code = :code
                     """),
@@ -150,7 +153,7 @@ class StockRepository:
             try:
                 session.execute(
                     text("""
-                        UPDATE collection_stocks
+                        UPDATE stocks
                         SET is_active = true, updated_at = NOW()
                         WHERE stock_code = :code
                     """),
@@ -163,25 +166,25 @@ class StockRepository:
                 session.rollback()
                 return False
 
-    def init_default_stocks(self, top_n: int = 30) -> int:
-        """시가총액 상위 종목을 KIS API에서 조회하여 DB에 추가/업데이트
+    def sync_top_stocks(self, top_n: int = 30) -> dict:
+        """시가총액 + 거래량 상위 종목을 KIS API에서 조회하여 DB에 추가
 
         Args:
-            top_n: 상위 몇 개 종목을 수집할지 (기본 30개)
+            top_n: 각각 상위 몇 개 종목을 수집할지 (기본 30개)
 
         Returns:
-            int: 추가/업데이트된 종목 수
+            dict: {"market_cap": int, "volume": int, "total": int}
         """
-        from ml.kis_client import KISAPIClient
+        from app.services.kis_api import KISAPIClient
 
-        # KIS API 클라이언트 생성
         app_key = os.getenv("KIS_APP_KEY")
         app_secret = os.getenv("KIS_APP_SECRET")
         account_number = os.getenv("KIS_ACCOUNT_NUMBER")
 
         if not app_key or not app_secret or not account_number:
             print("⚠️  KIS API credentials not found, using fallback stocks")
-            return self._init_fallback_stocks()
+            count = self._init_fallback_stocks()
+            return {"market_cap": count, "volume": 0, "total": count}
 
         try:
             client = KISAPIClient(
@@ -193,51 +196,74 @@ class StockRepository:
                 use_mock=os.getenv("KIS_USE_MOCK", "True").lower() == "true",
             )
 
-            print("📊 Fetching market cap ranking from KIS API...")
-            result = client.get_market_cap_ranking(market="J", top_n=top_n)
+            added_codes = set()
+            market_cap_count = 0
+            volume_count = 0
 
-            if result.get("rt_cd") != "0":
-                print(f"⚠️  API error: {result.get('msg1')}, using fallback stocks")
-                return self._init_fallback_stocks()
+            # 1. 시가총액 상위 종목
+            print(f"\n📊 Fetching top {top_n} market cap stocks...")
+            result = client.get_market_cap_ranking(top_n=top_n)
 
-            output = result.get("output", [])
-            if not output:
-                print("⚠️  No data from API, using fallback stocks")
-                return self._init_fallback_stocks()
+            if result.get("rt_cd") == "0":
+                for i, item in enumerate(result.get("output", [])[:top_n]):
+                    stock_code = item.get("mksc_shrn_iscd", "")
+                    stock_name = item.get("hts_kor_isnm", "")
+                    market_cap = item.get("stck_avls", "")
 
-            count = 0
-            for i, item in enumerate(output[:top_n]):
-                stock_code = item.get("mksc_shrn_iscd", "")  # 종목코드
-                stock_name = item.get("hts_kor_isnm", "")    # 종목명
-                market_cap = item.get("stck_avls", "")       # 시가총액
+                    if not stock_code or not stock_name:
+                        continue
 
-                if not stock_code or not stock_name:
-                    continue
+                    market = "KOSDAQ" if stock_code.startswith("3") else "KOSPI"
+                    priority = 100 - i
 
-                # 시장 구분 (종목코드 첫자리로 판단)
-                market = "KOSDAQ" if stock_code.startswith("3") else "KOSPI"
+                    try:
+                        market_cap_억 = int(market_cap) // 100000000
+                        desc = f"시가총액 {i+1}위 ({market_cap_억:,}억)"
+                    except:
+                        desc = f"시가총액 {i+1}위"
 
-                # 우선순위: 순위가 높을수록 priority 높게
-                priority = 100 - i
+                    if stock_code not in added_codes:
+                        if self.add_stock(stock_code, stock_name, market, priority, desc):
+                            added_codes.add(stock_code)
+                            market_cap_count += 1
+                            print(f"  ✅ [시총] {stock_code} - {stock_name} ({market})")
 
-                # 시가총액을 억 단위로 변환하여 설명에 추가
-                try:
-                    market_cap_억 = int(market_cap) // 100000000
-                    desc = f"시가총액 {i+1}위 ({market_cap_억:,}억)"
-                except:
-                    desc = f"시가총액 {i+1}위"
+            # 2. 거래량 상위 종목
+            print(f"\n📈 Fetching top {top_n} volume stocks...")
+            result = client.get_volume_ranking()
 
-                if self.add_stock(stock_code, stock_name, market, priority, desc):
-                    count += 1
-                    print(f"✅ [{i+1:2}] {stock_code} - {stock_name} ({market}) - {desc}")
+            if result.get("rt_cd") == "0":
+                for i, item in enumerate(result.get("output", [])[:top_n]):
+                    stock_code = item.get("mksc_shrn_iscd", "")
+                    stock_name = item.get("hts_kor_isnm", "")
 
-            print(f"\n📈 Total {count} stocks synced from market cap ranking")
-            return count
+                    if not stock_code or not stock_name:
+                        continue
+
+                    market = "KOSDAQ" if stock_code.startswith("3") else "KOSPI"
+
+                    if stock_code not in added_codes:
+                        priority = 50 - i  # 거래량 상위는 낮은 우선순위
+                        desc = f"거래량 {i+1}위"
+                        if self.add_stock(stock_code, stock_name, market, priority, desc):
+                            added_codes.add(stock_code)
+                            volume_count += 1
+                            print(f"  ✅ [거래량] {stock_code} - {stock_name} ({market})")
+
+            total = len(added_codes)
+            print(f"\n📋 Summary: 시총 {market_cap_count}개 + 거래량 {volume_count}개 = 총 {total}개 종목")
+
+            return {
+                "market_cap": market_cap_count,
+                "volume": volume_count,
+                "total": total
+            }
 
         except Exception as e:
-            print(f"⚠️  Failed to fetch from API: {e}")
+            print(f"❌ Failed to sync stocks: {e}")
             print("⚠️  Using fallback stocks")
-            return self._init_fallback_stocks()
+            count = self._init_fallback_stocks()
+            return {"market_cap": count, "volume": 0, "total": count}
 
     def _init_fallback_stocks(self) -> int:
         """API 실패 시 사용할 기본 종목 (하드코딩)
