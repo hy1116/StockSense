@@ -119,12 +119,22 @@ export const searchStocks = async (query, limit = 10) => {
 
 // ===== Auth API =====
 
+export const authRegister = async (data) => {
+  const response = await api.post('/api/auth/register', {
+    username: data.username,
+    password: data.password,
+    kis_api_key: data.kisApiKey,
+    kis_api_secret: data.kisApiSecret,
+    kis_account_no: data.kisAccountNo,
+    kis_account_product_code: data.kisAccountProductCode || '01'
+  })
+  return response.data
+}
+
 export const authLogin = async (credentials) => {
   const response = await api.post('/api/auth/login', {
-    api_key: credentials.apiKey,
-    api_secret: credentials.apiSecret,
-    account_no: credentials.accountNo,
-    account_product_code: credentials.accountProductCode || '01'
+    username: credentials.username,
+    password: credentials.password
   })
   return response.data
 }
@@ -141,6 +151,11 @@ export const authCheck = async () => {
 
 export const authGetMe = async () => {
   const response = await api.get('/api/auth/me')
+  return response.data
+}
+
+export const checkUsername = async (username) => {
+  const response = await api.get(`/api/auth/check-username/${username}`)
   return response.data
 }
 

@@ -1,4 +1,4 @@
-"""인증 서비스 - JWT 및 세션 관리"""
+"""인증 서비스 - JWT, 세션, 비밀번호 관리"""
 import json
 import secrets
 import logging
@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt, JWTError
 from cryptography.fernet import Fernet
+from passlib.context import CryptContext
 import base64
 import hashlib
 
@@ -16,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
+# 비밀번호 해싱
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 def _get_encryption_key() -> bytes:
     """JWT secret key를 Fernet 키로 변환"""
@@ -23,19 +27,37 @@ def _get_encryption_key() -> bytes:
     return base64.urlsafe_b64encode(key)
 
 
-def encrypt_credentials(credentials: dict) -> str:
-    """민감한 credentials 암호화"""
+def encrypt_data(data: str) -> str:
+    """민감한 데이터 암호화"""
     fernet = Fernet(_get_encryption_key())
-    json_data = json.dumps(credentials)
-    encrypted = fernet.encrypt(json_data.encode())
+    encrypted = fernet.encrypt(data.encode())
     return encrypted.decode()
 
 
-def decrypt_credentials(encrypted_data: str) -> dict:
-    """암호화된 credentials 복호화"""
+def decrypt_data(encrypted_data: str) -> str:
+    """암호화된 데이터 복호화"""
     fernet = Fernet(_get_encryption_key())
     decrypted = fernet.decrypt(encrypted_data.encode())
-    return json.loads(decrypted.decode())
+    return decrypted.decode()
+
+
+def _prepare_password(password: str) -> str:
+    """bcrypt 72바이트 제한을 위해 패스워드 전처리 (SHA256 + base64)"""
+    # SHA256 해시 후 base64 인코딩 (44자로 고정)
+    password_hash = hashlib.sha256(password.encode('utf-8')).digest()
+    return base64.b64encode(password_hash).decode('utf-8')
+
+
+def hash_password(password: str) -> str:
+    """비밀번호 해싱"""
+    prepared = _prepare_password(password)
+    return pwd_context.hash(prepared)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """비밀번호 검증"""
+    prepared = _prepare_password(plain_password)
+    return pwd_context.verify(prepared, hashed_password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -79,22 +101,14 @@ class SessionManager:
     def __init__(self):
         self.redis = get_redis_client()
 
-    def create_session(self, account_no: str, credentials: dict) -> str:
-        """새 세션 생성
-
-        Args:
-            account_no: 계좌번호
-            credentials: API 인증 정보 (apiKey, apiSecret, accountNo)
-
-        Returns:
-            session_id
-        """
+    def create_session(self, user_id: int, username: str, account_no: str = None) -> str:
+        """새 세션 생성"""
         session_id = secrets.token_urlsafe(32)
 
-        # credentials 암호화하여 Redis에 저장
         session_data = {
+            "user_id": user_id,
+            "username": username,
             "account_no": account_no,
-            "credentials": encrypt_credentials(credentials),
             "created_at": datetime.utcnow().isoformat()
         }
 
@@ -106,18 +120,14 @@ class SessionManager:
                 json.dumps(session_data),
                 expire=settings.session_expire_seconds
             )
-            logger.info(f"Session created for account {account_no[:4]}****")
+            logger.info(f"Session created for user {username}")
         else:
             logger.warning("Redis not available - session will not persist")
 
         return session_id
 
     def get_session(self, session_id: str) -> Optional[dict]:
-        """세션 조회
-
-        Returns:
-            {account_no, credentials(복호화됨), created_at} 또는 None
-        """
+        """세션 조회"""
         if not self.redis.is_available():
             return None
 
@@ -128,10 +138,7 @@ class SessionManager:
             return None
 
         try:
-            session_data = json.loads(data)
-            # credentials 복호화
-            session_data["credentials"] = decrypt_credentials(session_data["credentials"])
-            return session_data
+            return json.loads(data)
         except Exception as e:
             logger.error(f"Failed to parse session data: {e}")
             return None
@@ -156,7 +163,6 @@ class SessionManager:
 
         key = f"{self.SESSION_PREFIX}{session_id}"
 
-        # Redis TTL 갱신
         try:
             return self.redis.client.expire(key, settings.session_expire_seconds)
         except Exception as e:

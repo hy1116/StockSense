@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { authLogin, authLogout, authCheck, setAccessToken, clearAccessToken } from '../services/api'
+import { authLogin, authLogout, authCheck, authRegister, setAccessToken, clearAccessToken } from '../services/api'
 
 const AuthContext = createContext(null)
 
@@ -21,6 +21,7 @@ export function AuthProvider({ children }) {
       if (response.authenticated) {
         setIsLoggedIn(true)
         setUser({
+          username: response.username,
           accountNo: response.account_no,
         })
       } else {
@@ -36,6 +37,22 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const register = async (data) => {
+    try {
+      const response = await authRegister(data)
+
+      if (response.success) {
+        return { success: true, message: response.message }
+      } else {
+        return { success: false, message: response.message }
+      }
+    } catch (error) {
+      console.error('Register failed:', error)
+      const message = error.response?.data?.detail || error.message || '회원가입에 실패했습니다'
+      return { success: false, message }
+    }
+  }
+
   const login = async (credentials) => {
     try {
       const response = await authLogin(credentials)
@@ -48,6 +65,7 @@ export function AuthProvider({ children }) {
 
         setIsLoggedIn(true)
         setUser({
+          username: response.username,
           accountNo: response.account_no,
         })
 
@@ -79,6 +97,7 @@ export function AuthProvider({ children }) {
     isLoggedIn,
     user,
     isLoading,
+    register,
     login,
     logout,
     checkAuthStatus,

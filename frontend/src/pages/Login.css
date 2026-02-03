@@ -186,6 +186,164 @@
   margin: 0.25rem 0;
 }
 
+/* ===== Step Indicator (Register) ===== */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  padding: 0 1rem;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  opacity: 0.5;
+  transition: opacity 0.3s;
+}
+
+.step.active {
+  opacity: 1;
+}
+
+.step-number {
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #333;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background 0.3s, color 0.3s;
+}
+
+.step.active .step-number {
+  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
+  color: white;
+}
+
+.step-label {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+}
+
+.step.active .step-label {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.step-line {
+  flex: 1;
+  max-width: 60px;
+  height: 2px;
+  background: #333;
+  margin-bottom: 1.5rem;
+}
+
+/* ===== Input with Button (Username Check) ===== */
+.input-with-button {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.input-with-button input {
+  flex: 1;
+}
+
+.check-button {
+  padding: 0.875rem 1rem;
+  background: #333;
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid #444;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.check-button:hover:not(:disabled) {
+  background: #444;
+  border-color: #555;
+}
+
+.check-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== Success Text ===== */
+.success-text {
+  font-size: 0.8rem;
+  color: #4ade80;
+  margin-top: 0.25rem;
+}
+
+/* ===== Button Group ===== */
+.button-group {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.button-group .login-button {
+  flex: 1;
+  margin-top: 0;
+}
+
+.back-button {
+  padding: 1rem 1.5rem;
+  background: #333;
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid #444;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.back-button:hover:not(:disabled) {
+  background: #444;
+  border-color: #555;
+}
+
+.back-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== Login Footer (Register Link) ===== */
+.login-footer {
+  text-align: center;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #2a2a2a;
+}
+
+.login-footer p {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+}
+
+.login-footer a {
+  color: #646cff;
+  text-decoration: none;
+  font-weight: 500;
+  margin-left: 0.25rem;
+}
+
+.login-footer a:hover {
+  text-decoration: underline;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 480px) {
   .login-page {
@@ -251,5 +409,52 @@
 
   .login-notice p {
     color: rgba(33, 53, 71, 0.5);
+  }
+
+  .step-number {
+    background: #e0e0e0;
+    color: #213547;
+  }
+
+  .step-label {
+    color: rgba(33, 53, 71, 0.6);
+  }
+
+  .step.active .step-label {
+    color: #213547;
+  }
+
+  .step-line {
+    background: #e0e0e0;
+  }
+
+  .check-button {
+    background: #f0f0f0;
+    color: #213547;
+    border-color: #e0e0e0;
+  }
+
+  .check-button:hover:not(:disabled) {
+    background: #e0e0e0;
+    border-color: #d0d0d0;
+  }
+
+  .back-button {
+    background: #f0f0f0;
+    color: #213547;
+    border-color: #e0e0e0;
+  }
+
+  .back-button:hover:not(:disabled) {
+    background: #e0e0e0;
+    border-color: #d0d0d0;
+  }
+
+  .login-footer {
+    border-top-color: #e0e0e0;
+  }
+
+  .login-footer p {
+    color: rgba(33, 53, 71, 0.6);
   }
 }

@@ -1,16 +1,24 @@
 """인증 API 라우터"""
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Response, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
-from app.schemas.auth import LoginRequest, LoginResponse, UserInfo, LogoutResponse
+from app.database import get_db
+from app.models.user import User
+from app.schemas.auth import (
+    RegisterRequest, RegisterResponse,
+    LoginRequest, LoginResponse,
+    UserInfo, LogoutResponse, UpdateKisRequest
+)
 from app.services.auth import (
-    create_access_token,
-    verify_token,
-    get_session_manager,
-    SessionManager
+    create_access_token, verify_token,
+    hash_password, verify_password,
+    encrypt_data, decrypt_data,
+    get_session_manager, SessionManager
 )
 from app.services.kis_api import KISAPIClient
 from app.config import get_settings
@@ -23,12 +31,10 @@ settings = get_settings()
 
 async def get_current_user(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: AsyncSession = Depends(get_db)
 ) -> Optional[UserInfo]:
-    """현재 인증된 사용자 정보 조회
-
-    Authorization 헤더 또는 Cookie에서 토큰을 확인
-    """
+    """현재 인증된 사용자 정보 조회"""
     token = None
 
     # 1. Authorization 헤더에서 토큰 추출
@@ -59,7 +65,8 @@ async def get_current_user(
         return None
 
     return UserInfo(
-        account_no=session["account_no"],
+        username=session["username"],
+        account_no=session.get("account_no"),
         is_authenticated=True
     )
 
@@ -69,79 +76,139 @@ async def require_auth(
 ) -> UserInfo:
     """인증 필수 의존성"""
     if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="인증이 필요합니다"
-        )
+        raise HTTPException(status_code=401, detail="인증이 필요합니다")
     return user
 
 
-def get_user_credentials(session_id: str) -> Optional[dict]:
-    """세션에서 사용자 credentials 조회 (KIS API 호출용)"""
-    session_manager = get_session_manager()
-    session = session_manager.get_session(session_id)
-
-    if not session:
-        return None
-
-    return session.get("credentials")
-
-
-@router.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest, response: Response):
-    """로그인 - KIS API 인증 후 JWT 발급"""
+@router.post("/register", response_model=RegisterResponse)
+async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """회원가입 - KIS API 검증 후 사용자 생성"""
     try:
-        # 1. KIS API로 토큰 발급 테스트 (credentials 유효성 검증)
-        logger.info(f"Login attempt for account: {request.account_no[:4]}****")
-
-        kis_client = KISAPIClient(
-            app_key=request.api_key,
-            app_secret=request.api_secret,
-            account_number=request.account_no,
-            account_product_code=request.account_product_code,
-            base_url=settings.kis_base_url,
-            use_mock=settings.kis_use_mock
+        # 1. 아이디 중복 확인
+        result = await db.execute(
+            select(User).where(User.username == request.username)
         )
+        existing_user = result.scalar_one_or_none()
 
-        # 간단한 API 호출로 credentials 검증 (잔고 조회)
+        if existing_user:
+            return RegisterResponse(
+                success=False,
+                message="이미 사용 중인 아이디입니다"
+            )
+
+        # 2. KIS API 검증
+        logger.info(f"Validating KIS API for user: {request.username}")
+
         try:
+            kis_client = KISAPIClient(
+                app_key=request.kis_api_key,
+                app_secret=request.kis_api_secret,
+                account_number=request.kis_account_no,
+                account_product_code=request.kis_account_product_code,
+                base_url=settings.kis_base_url,
+                use_mock=settings.kis_use_mock
+            )
+
             balance = kis_client.get_balance()
             if balance.get("rt_cd") != "0":
                 error_msg = balance.get("msg1", "API 인증 실패")
                 logger.warning(f"KIS API validation failed: {error_msg}")
-                return LoginResponse(
+                return RegisterResponse(
                     success=False,
-                    message=f"API 인증 실패: {error_msg}"
+                    message=f"KIS API 인증 실패: {error_msg}"
                 )
         except Exception as e:
             logger.error(f"KIS API call failed: {e}")
-            return LoginResponse(
+            return RegisterResponse(
                 success=False,
-                message=f"API 연결 실패: {str(e)}"
+                message=f"KIS API 연결 실패: {str(e)}"
             )
 
-        # 2. Redis에 세션 저장 (암호화된 credentials)
-        session_manager = get_session_manager()
-        session_id = session_manager.create_session(
-            account_no=request.account_no,
-            credentials={
-                "api_key": request.api_key,
-                "api_secret": request.api_secret,
-                "account_no": request.account_no,
-                "account_product_code": request.account_product_code
-            }
+        # 3. 사용자 생성 (API Key/Secret 암호화)
+        new_user = User(
+            username=request.username,
+            password_hash=hash_password(request.password),
+            kis_api_key=encrypt_data(request.kis_api_key),
+            kis_api_secret=encrypt_data(request.kis_api_secret),
+            kis_account_no=request.kis_account_no,
+            kis_account_product_code=request.kis_account_product_code,
+            is_active=True
         )
 
-        # 3. JWT 토큰 생성
+        db.add(new_user)
+        await db.commit()
+
+        logger.info(f"User registered: {request.username}")
+
+        return RegisterResponse(
+            success=True,
+            message="회원가입이 완료되었습니다",
+            username=request.username
+        )
+
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"회원가입 처리 중 오류: {str(e)}")
+
+
+@router.post("/login", response_model=LoginResponse)
+async def login(
+    request: LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db)
+):
+    """로그인 - 아이디/비밀번호 인증 후 JWT 발급"""
+    try:
+        # 1. 사용자 조회
+        result = await db.execute(
+            select(User).where(User.username == request.username)
+        )
+        user = result.scalar_one_or_none()
+
+        if not user:
+            return LoginResponse(
+                success=False,
+                message="아이디 또는 비밀번호가 올바르지 않습니다"
+            )
+
+        # 2. 비밀번호 확인
+        if not verify_password(request.password, user.password_hash):
+            return LoginResponse(
+                success=False,
+                message="아이디 또는 비밀번호가 올바르지 않습니다"
+            )
+
+        # 3. 활성 사용자 확인
+        if not user.is_active:
+            return LoginResponse(
+                success=False,
+                message="비활성화된 계정입니다"
+            )
+
+        # 4. 마지막 로그인 시간 업데이트
+        user.last_login_at = datetime.utcnow()
+        await db.commit()
+
+        # 5. Redis에 세션 저장
+        session_manager = get_session_manager()
+        session_id = session_manager.create_session(
+            user_id=user.id,
+            username=user.username,
+            account_no=user.kis_account_no
+        )
+
+        # 6. JWT 토큰 생성
         access_token = create_access_token(
             data={
                 "session_id": session_id,
-                "account_no": request.account_no
+                "user_id": user.id,
+                "username": user.username
             },
             expires_delta=timedelta(minutes=settings.jwt_expire_minutes)
         )
 
-        # 4. HttpOnly Cookie 설정 (선택적)
+        # 7. HttpOnly Cookie 설정
         response.set_cookie(
             key="access_token",
             value=access_token,
@@ -151,12 +218,13 @@ async def login(request: LoginRequest, response: Response):
             max_age=settings.session_expire_seconds
         )
 
-        logger.info(f"Login successful for account: {request.account_no[:4]}****")
+        logger.info(f"Login successful: {user.username}")
 
         return LoginResponse(
             success=True,
             message="로그인 성공",
-            account_no=request.account_no,
+            username=user.username,
+            account_no=user.kis_account_no,
             access_token=access_token
         )
 
@@ -208,9 +276,25 @@ async def check_auth(user: Optional[UserInfo] = Depends(get_current_user)):
     if user:
         return {
             "authenticated": True,
+            "username": user.username,
             "account_no": user.account_no
         }
     return {
         "authenticated": False,
+        "username": None,
         "account_no": None
+    }
+
+
+@router.get("/check-username/{username}")
+async def check_username(username: str, db: AsyncSession = Depends(get_db)):
+    """아이디 중복 확인"""
+    result = await db.execute(
+        select(User).where(User.username == username)
+    )
+    existing = result.scalar_one_or_none()
+
+    return {
+        "available": existing is None,
+        "message": "사용 가능한 아이디입니다" if existing is None else "이미 사용 중인 아이디입니다"
     }
