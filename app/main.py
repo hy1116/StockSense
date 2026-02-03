@@ -8,7 +8,7 @@ import logging
 
 from h11 import Request
 
-from app.api import portfolio, prediction
+from app.api import portfolio, prediction, auth
 from app.database import init_db, close_db
 from app.config import get_settings
 
@@ -98,6 +98,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(portfolio.router)
 app.include_router(prediction.router)
 

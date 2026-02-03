@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     redis_db: int = 0
     redis_password: str = ""
 
+    # JWT Configuration
+    jwt_secret_key: str = "your-super-secret-key-change-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24  # 24시간
+
+    # Session Configuration
+    session_expire_seconds: int = 60 * 60 * 24  # 24시간
+
     # CORS Configuration
     cors_origins: str = "*"
 

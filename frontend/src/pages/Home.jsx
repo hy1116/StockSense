@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import { getHealthCheck, getTopStocks, getMarketCapStocks, getPortfolio, searchStocks } from '../services/api'
 import './Home.css'
 
 function Home() {
+  const { isLoggedIn } = useAuth()
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('marketCap') // 'volume' | 'marketCap' | 'holdings'
   const [searchResults, setSearchResults] = useState([])
@@ -35,6 +37,7 @@ function Home() {
     queryKey: ['portfolio'],
     queryFn: getPortfolio,
     refetchInterval: 300000,
+    enabled: isLoggedIn, // 로그인 상태에서만 쿼리 실행
   })
 
   const formatNumber = (num) => {
@@ -171,39 +174,41 @@ function Home() {
         </div>
       </section>
 
-      {/* 내 자산 섹션 */}
-      <section className="portfolio-summary">
-        <h2>내 자산</h2>
-        {isLoadingPortfolio ? (
-          <div className="loading">자산 정보를 불러오는 중...</div>
-        ) : portfolio ? (
-          <div className="portfolio-cards">
-            <div className="portfolio-card">
-              <div className="portfolio-label">총 자산</div>
-              <div className="portfolio-value">{formatNumber(portfolio.total_asset)}원</div>
-            </div>
-            <div className="portfolio-card">
-              <div className="portfolio-label">보유 현금</div>
-              <div className="portfolio-value">{formatNumber(portfolio.cash)}원</div>
-            </div>
-            <div className="portfolio-card">
-              <div className="portfolio-label">주식 평가액</div>
-              <div className="portfolio-value">{formatNumber(portfolio.stock_eval_amount)}원</div>
-            </div>
-            <div className="portfolio-card">
-              <div className="portfolio-label">평가 손익</div>
-              <div className={`portfolio-value ${getPriceChangeClass(portfolio.total_profit_rate)}`}>
-                {formatNumber(portfolio.total_profit_loss)}원
-                <span className="portfolio-rate">
-                  ({portfolio.total_profit_rate > 0 ? '+' : ''}{portfolio.total_profit_rate.toFixed(2)}%)
-                </span>
+      {/* 내 자산 섹션 - 로그인 상태에서만 표시 */}
+      {isLoggedIn && (
+        <section className="portfolio-summary">
+          <h2>내 자산</h2>
+          {isLoadingPortfolio ? (
+            <div className="loading">자산 정보를 불러오는 중...</div>
+          ) : portfolio ? (
+            <div className="portfolio-cards">
+              <div className="portfolio-card">
+                <div className="portfolio-label">총 자산</div>
+                <div className="portfolio-value">{formatNumber(portfolio.total_asset)}원</div>
+              </div>
+              <div className="portfolio-card">
+                <div className="portfolio-label">보유 현금</div>
+                <div className="portfolio-value">{formatNumber(portfolio.cash)}원</div>
+              </div>
+              <div className="portfolio-card">
+                <div className="portfolio-label">주식 평가액</div>
+                <div className="portfolio-value">{formatNumber(portfolio.stock_eval_amount)}원</div>
+              </div>
+              <div className="portfolio-card">
+                <div className="portfolio-label">평가 손익</div>
+                <div className={`portfolio-value ${getPriceChangeClass(portfolio.total_profit_rate)}`}>
+                  {formatNumber(portfolio.total_profit_loss)}원
+                  <span className="portfolio-rate">
+                    ({portfolio.total_profit_rate > 0 ? '+' : ''}{portfolio.total_profit_rate.toFixed(2)}%)
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="error">자산 정보를 불러올 수 없습니다</div>
-        )}
-      </section>
+          ) : (
+            <div className="error">자산 정보를 불러올 수 없습니다</div>
+          )}
+        </section>
+      )}
 
       {/* 상위 종목 섹션 - 탭 형태 */}
       <section className="ranking-section">
@@ -221,12 +226,14 @@ function Home() {
             >
               거래량 상위
             </button>
-            <button
-              className={`tab-button ${activeTab === 'holdings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('holdings')}
-            >
-              보유 종목
-            </button>
+            {isLoggedIn && (
+              <button
+                className={`tab-button ${activeTab === 'holdings' ? 'active' : ''}`}
+                onClick={() => setActiveTab('holdings')}
+              >
+                보유 종목
+              </button>
+            )}
           </div>
         </div>
 
@@ -271,8 +278,8 @@ function Home() {
           )
         )}
 
-        {/* 보유 종목 탭 */}
-        {activeTab === 'holdings' && (
+        {/* 보유 종목 탭 - 로그인 상태에서만 표시 */}
+        {isLoggedIn && activeTab === 'holdings' && (
           isLoadingPortfolio ? (
             <div className="loading">보유 종목을 불러오는 중...</div>
           ) : portfolio?.holdings && portfolio.holdings.length > 0 ? (

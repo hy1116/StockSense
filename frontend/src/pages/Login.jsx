@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import './Login.css'
 
 function Login() {
   const navigate = useNavigate()
+  const { login } = useAuth()
   const [formData, setFormData] = useState({
     apiKey: '',
     apiSecret: '',
@@ -48,21 +50,21 @@ function Login() {
     }
 
     try {
-      // TODO: 실제 API 연동 시 백엔드로 인증 요청
-      // const response = await axios.post('/api/auth/login', formData)
-
-      // 임시로 로컬스토리지에 저장
-      localStorage.setItem('kis_credentials', JSON.stringify({
+      // AuthContext의 login 함수 사용 (API 호출)
+      const result = await login({
         apiKey: formData.apiKey,
         apiSecret: formData.apiSecret,
         accountNo: formData.accountNo,
-        isLoggedIn: true
-      }))
+      })
 
-      // 메인 페이지로 이동
-      navigate('/')
+      if (result.success) {
+        // 메인 페이지로 이동
+        navigate('/')
+      } else {
+        setError(result.message || '로그인에 실패했습니다')
+      }
     } catch (err) {
-      setError(err.response?.data?.detail || '로그인에 실패했습니다')
+      setError(err.message || '로그인에 실패했습니다')
     } finally {
       setIsLoading(false)
     }
@@ -172,7 +174,7 @@ function Login() {
         </div>
 
         <div className="login-notice">
-          <p>* 입력한 정보는 브라우저에 저장되며, 서버로 전송되지 않습니다.</p>
+          <p>* 입력한 정보는 암호화되어 서버에 안전하게 저장됩니다.</p>
           <p>* 실제 거래는 본인 책임 하에 이루어집니다.</p>
         </div>
       </div>
