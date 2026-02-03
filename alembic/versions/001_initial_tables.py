@@ -5,11 +5,9 @@ Revises:
 Create Date: 2025-01-30
 
 Tables:
-- stocks: 종목 기본 정보
-- stock_prices: 주식 가격 히스토리
+- stocks: 종목 기본 정보 (검색 + 수집 대상 통합)
 - predictions: 주가 예측 기록
 - trading_history: 거래 내역
-- collection_stocks: 데이터 수집 대상 종목
 - portfolio_snapshots: 포트폴리오 스냅샷
 """
 from alembic import op
@@ -24,7 +22,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # stocks 테이블
+    # stocks 테이블 (검색 + 수집 대상 통합)
     op.create_table(
         'stocks',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -33,34 +31,18 @@ def upgrade() -> None:
         sa.Column('market', sa.String(length=20), nullable=True),
         sa.Column('sector', sa.String(length=50), nullable=True),
         sa.Column('industry', sa.String(length=50), nullable=True),
+        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
+        sa.Column('priority', sa.Integer(), nullable=True, server_default=sa.text('0')),
+        sa.Column('description', sa.String(length=200), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('stock_code')
     )
     op.create_index('idx_stock_code', 'stocks', ['stock_code'], unique=False)
+    op.create_index('idx_stock_active', 'stocks', ['is_active'], unique=False)
     op.create_index(op.f('ix_stocks_id'), 'stocks', ['id'], unique=False)
     op.create_index(op.f('ix_stocks_stock_code'), 'stocks', ['stock_code'], unique=True)
-
-    # stock_prices 테이블
-    op.create_table(
-        'stock_prices',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('stock_code', sa.String(length=10), nullable=False),
-        sa.Column('date', sa.DateTime(), nullable=False),
-        sa.Column('open_price', sa.Float(), nullable=True),
-        sa.Column('high_price', sa.Float(), nullable=True),
-        sa.Column('low_price', sa.Float(), nullable=True),
-        sa.Column('close_price', sa.Float(), nullable=False),
-        sa.Column('volume', sa.Integer(), nullable=True),
-        sa.Column('change_price', sa.Float(), nullable=True),
-        sa.Column('change_rate', sa.Float(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('idx_stock_code_date', 'stock_prices', ['stock_code', 'date'], unique=False)
-    op.create_index(op.f('ix_stock_prices_id'), 'stock_prices', ['id'], unique=False)
-    op.create_index(op.f('ix_stock_prices_stock_code'), 'stock_prices', ['stock_code'], unique=False)
 
     # predictions 테이블
     op.create_table(
@@ -105,25 +87,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_trading_history_id'), 'trading_history', ['id'], unique=False)
     op.create_index(op.f('ix_trading_history_stock_code'), 'trading_history', ['stock_code'], unique=False)
 
-    # collection_stocks 테이블
-    op.create_table(
-        'collection_stocks',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('stock_code', sa.String(length=10), nullable=False),
-        sa.Column('stock_name', sa.String(length=100), nullable=False),
-        sa.Column('market', sa.String(length=20), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
-        sa.Column('priority', sa.Integer(), nullable=True, server_default=sa.text('0')),
-        sa.Column('description', sa.String(length=200), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('stock_code')
-    )
-    op.create_index('idx_collection_stock_active', 'collection_stocks', ['is_active'], unique=False)
-    op.create_index(op.f('ix_collection_stocks_id'), 'collection_stocks', ['id'], unique=False)
-    op.create_index(op.f('ix_collection_stocks_stock_code'), 'collection_stocks', ['stock_code'], unique=True)
-
     # portfolio_snapshots 테이블
     op.create_table(
         'portfolio_snapshots',
@@ -143,8 +106,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table('portfolio_snapshots')
-    op.drop_table('collection_stocks')
     op.drop_table('trading_history')
     op.drop_table('predictions')
-    op.drop_table('stock_prices')
     op.drop_table('stocks')

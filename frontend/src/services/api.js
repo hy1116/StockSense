@@ -69,4 +69,11 @@ export const getMarketCapStocks = async (limit = 10) => {
   return response.data
 }
 
+export const searchStocks = async (query, limit = 10) => {
+  const response = await api.get('/api/portfolio/search', {
+    params: { q: query, limit }
+  })
+  return response.data
+}
+
 export default api

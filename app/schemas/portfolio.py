@@ -130,3 +130,16 @@ class TopStock(BaseModel):
 class TopStocksResponse(BaseModel):
     """시가총액 상위 종목 목록"""
     stocks: List[TopStock] = Field(..., description="상위 종목 리스트")
+
+
+class StockSearchItem(BaseModel):
+    """검색 결과 종목 정보"""
+    stock_code: str = Field(..., description="종목코드")
+    stock_name: str = Field(..., description="종목명")
+    market: Optional[str] = Field(None, description="시장구분 (KOSPI/KOSDAQ)")
+
+
+class StockSearchResponse(BaseModel):
+    """종목 검색 응답"""
+    results: List[StockSearchItem] = Field(default=[], description="검색 결과 리스트")
+    total: int = Field(..., description="검색 결과 수")

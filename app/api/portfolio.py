@@ -1,5 +1,7 @@
 """포트폴리오 API 엔드포인트"""
 from fastapi import APIRouter, HTTPException, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, or_
 from typing import List
 from datetime import datetime
 import logging
@@ -16,15 +18,71 @@ from app.schemas.portfolio import (
     ChartData,
     PredictionResult,
     TopStock,
-    TopStocksResponse
+    TopStocksResponse,
+    StockSearchItem,
+    StockSearchResponse
 )
 from app.services.kis_api import get_kis_client, KISAPIClient
 from app.services.prediction import get_prediction_service, PredictionService
 from app.services.redis_client import get_redis_client
+from app.database import get_db
+from app.models.stock import Stock
 import json
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/portfolio", tags=["Portfolio"])
+
+
+@router.get("/search", response_model=StockSearchResponse)
+async def search_stocks(
+    q: str = Query(..., min_length=1, description="검색어 (종목명 또는 코드)"),
+    limit: int = Query(default=10, ge=1, le=30, description="최대 결과 수"),
+    db: AsyncSession = Depends(get_db)
+):
+    """종목명 또는 코드로 검색 (DB 기반)"""
+    try:
+        search_term = q.strip()
+
+        # 종목코드 또는 종목명으로 검색 (부분 일치)
+        query = select(Stock).where(
+            or_(
+                Stock.stock_code.contains(search_term),
+                Stock.stock_name.contains(search_term)
+            )
+        ).limit(limit)
+
+        result = await db.execute(query)
+        stocks = result.scalars().all()
+
+        # 정렬: 완전 일치 우선, 시작 일치 그 다음
+        def sort_key(stock):
+            if stock.stock_code == search_term:
+                return (0, stock.stock_name)
+            elif stock.stock_name == search_term:
+                return (1, stock.stock_name)
+            elif stock.stock_code.startswith(search_term):
+                return (2, stock.stock_name)
+            elif stock.stock_name.startswith(search_term):
+                return (3, stock.stock_name)
+            else:
+                return (4, stock.stock_name)
+
+        sorted_stocks = sorted(stocks, key=sort_key)
+
+        results = [
+            StockSearchItem(
+                stock_code=stock.stock_code,
+                stock_name=stock.stock_name,
+                market=stock.market
+            )
+            for stock in sorted_stocks
+        ]
+
+        return StockSearchResponse(results=results, total=len(results))
+
+    except Exception as e:
+        logger.error(f"Stock search error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/balance", response_model=PortfolioSummary)
@@ -33,18 +91,18 @@ async def get_portfolio_balance(
 ):
     """계좌 잔고 및 포트폴리오 조회 (Redis 캐시 5분)"""
     try:
-        redis = get_redis_client()
-        cache_key = "portfolio:balance"
+        # redis = get_redis_client()
+        # cache_key = "portfolio:balance"
 
         # 1. Redis 캐시 확인
-        if redis.is_available():
-            cached_data = redis.get(cache_key)
-            if cached_data:
-                try:
-                    cached_dict = json.loads(cached_data)
-                    return PortfolioSummary(**cached_dict)
-                except Exception:
-                    pass
+        # if redis.is_available():
+        #     cached_data = redis.get(cache_key)
+        #     if cached_data:
+        #         try:
+        #             cached_dict = json.loads(cached_data)
+        #             return PortfolioSummary(**cached_dict)
+        #         except Exception:
+        #             pass
 
         # 2. KIS API 호출
         result = client.get_balance()
@@ -86,12 +144,12 @@ async def get_portfolio_balance(
         )
 
         # 3. Redis에 캐싱 (5분 = 300초)
-        if redis.is_available():
-            try:
-                cache_data = json.dumps(summary.model_dump())
-                redis.set(cache_key, cache_data, expire=300)
-            except Exception:
-                pass
+        # if redis.is_available():
+        #     try:
+        #         cache_data = json.dumps(summary.model_dump())
+        #         redis.set(cache_key, cache_data, expire=300)
+        #     except Exception:
+        #         pass
 
         return summary
 

@@ -1,12 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { getHealthCheck, getTopStocks, getMarketCapStocks, getPortfolio } from '../services/api'
+import { Link, useNavigate } from 'react-router-dom'
+import { getHealthCheck, getTopStocks, getMarketCapStocks, getPortfolio, searchStocks } from '../services/api'
 import './Home.css'
 
 function Home() {
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('marketCap') // 'volume' | 'marketCap' | 'holdings'
+  const [searchResults, setSearchResults] = useState([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const searchRef = useRef(null)
+  const navigate = useNavigate()
 
   const { data: health, isLoading } = useQuery({
     queryKey: ['health'],
@@ -51,11 +57,70 @@ function Home() {
     return ''
   }
 
+  // 검색어 변경 시 자동완성 검색
+  useEffect(() => {
+    const delaySearch = setTimeout(async () => {
+      if (searchTerm.trim().length >= 1) {
+        setIsSearching(true)
+        try {
+          const data = await searchStocks(searchTerm, 10)
+          setSearchResults(data.results || [])
+          setShowDropdown(true)
+          setSelectedIndex(-1)
+        } catch (error) {
+          console.error('Search error:', error)
+          setSearchResults([])
+        } finally {
+          setIsSearching(false)
+        }
+      } else {
+        setSearchResults([])
+        setShowDropdown(false)
+      }
+    }, 300) // 300ms 디바운스
+
+    return () => clearTimeout(delaySearch)
+  }, [searchTerm])
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const handleSearch = (e) => {
     e.preventDefault()
-    if (searchTerm.trim()) {
-      window.location.href = `/stock/${searchTerm.toUpperCase()}`
+    if (selectedIndex >= 0 && searchResults[selectedIndex]) {
+      navigate(`/stock/${searchResults[selectedIndex].stock_code}`)
+    } else if (searchTerm.trim()) {
+      navigate(`/stock/${searchTerm.toUpperCase()}`)
     }
+    setShowDropdown(false)
+  }
+
+  const handleKeyDown = (e) => {
+    if (!showDropdown || searchResults.length === 0) return
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedIndex((prev) => (prev < searchResults.length - 1 ? prev + 1 : prev))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1))
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false)
+    }
+  }
+
+  const handleResultClick = (stockCode) => {
+    navigate(`/stock/${stockCode}`)
+    setShowDropdown(false)
+    setSearchTerm('')
   }
 
   const currentStocks = activeTab === 'volume' ? topStocksData?.stocks : marketCapData?.stocks
@@ -72,18 +137,38 @@ function Home() {
       </section>
 
       <section className="search-section">
-        <form onSubmit={handleSearch} className="search-form">
-          <input
-            type="text"
-            placeholder="종목 코드 입력 (예: 005930, 035420)"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-          <button type="submit" className="search-button">
-            검색
-          </button>
-        </form>
+        <div className="search-container" ref={searchRef}>
+          <form onSubmit={handleSearch} className="search-form">
+            <input
+              type="text"
+              placeholder="종목명 또는 코드 검색 (예: 삼성전자, 005930)"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+              className="search-input"
+            />
+            <button type="submit" className="search-button">
+              {isSearching ? '...' : '검색'}
+            </button>
+          </form>
+          {showDropdown && searchResults.length > 0 && (
+            <div className="search-dropdown">
+              {searchResults.map((stock, index) => (
+                <div
+                  key={stock.stock_code}
+                  className={`search-dropdown-item ${index === selectedIndex ? 'selected' : ''}`}
+                  onClick={() => handleResultClick(stock.stock_code)}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                >
+                  <span className="dropdown-name">{stock.stock_name}</span>
+                  <span className="dropdown-code">{stock.stock_code}</span>
+                  {stock.market && <span className="dropdown-market">{stock.market}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
       {/* 내 자산 섹션 */}

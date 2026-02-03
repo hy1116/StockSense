@@ -1,13 +1,81 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { searchStocks } from '../services/api'
 import './Prediction.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 function Prediction() {
   const [stockCode, setStockCode] = useState('')
+  const [stockName, setStockName] = useState('')
   const [loading, setLoading] = useState(false)
   const [prediction, setPrediction] = useState(null)
   const [error, setError] = useState('')
+
+  // 검색 자동완성 상태
+  const [searchResults, setSearchResults] = useState([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const searchRef = useRef(null)
+
+  // 검색어 변경 시 자동완성 검색
+  useEffect(() => {
+    const delaySearch = setTimeout(async () => {
+      if (stockCode.trim().length >= 1) {
+        setIsSearching(true)
+        try {
+          const data = await searchStocks(stockCode, 10)
+          setSearchResults(data.results || [])
+          setShowDropdown(true)
+          setSelectedIndex(-1)
+        } catch (error) {
+          console.error('Search error:', error)
+          setSearchResults([])
+        } finally {
+          setIsSearching(false)
+        }
+      } else {
+        setSearchResults([])
+        setShowDropdown(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(delaySearch)
+  }, [stockCode])
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleKeyDown = (e) => {
+    if (!showDropdown || searchResults.length === 0) return
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedIndex((prev) => (prev < searchResults.length - 1 ? prev + 1 : prev))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1))
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false)
+    } else if (e.key === 'Enter' && selectedIndex >= 0) {
+      e.preventDefault()
+      handleResultClick(searchResults[selectedIndex])
+    }
+  }
+
+  const handleResultClick = (stock) => {
+    setStockCode(stock.stock_code)
+    setStockName(stock.stock_name)
+    setShowDropdown(false)
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -83,25 +151,51 @@ function Prediction() {
       <div className="card">
         <h2>예측 설정</h2>
         <form className="prediction-form" onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="symbol">종목 코드</label>
-            <input
-              type="text"
-              id="symbol"
-              placeholder="예: 005930 (삼성전자)"
-              value={stockCode}
-              onChange={(e) => setStockCode(e.target.value)}
-              disabled={loading}
-            />
+          <div className="form-group" ref={searchRef}>
+            <label htmlFor="symbol">종목 검색</label>
+            <div className="search-input-wrapper">
+              <input
+                type="text"
+                id="symbol"
+                placeholder="종목명 또는 코드 입력 (예: 삼성전자, 005930)"
+                value={stockCode}
+                onChange={(e) => {
+                  setStockCode(e.target.value)
+                  setStockName('')
+                }}
+                onKeyDown={handleKeyDown}
+                onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+                disabled={loading}
+                autoComplete="off"
+              />
+              {stockName && (
+                <span className="selected-stock-name">{stockName}</span>
+              )}
+              <button type="submit" className="predict-button" disabled={loading}>
+                {loading ? '예측 중...' : '예측'}
+              </button>
+            </div>
+            {showDropdown && searchResults.length > 0 && (
+              <div className="search-dropdown">
+                {searchResults.map((stock, index) => (
+                  <div
+                    key={stock.stock_code}
+                    className={`search-dropdown-item ${index === selectedIndex ? 'selected' : ''}`}
+                    onClick={() => handleResultClick(stock)}
+                    onMouseEnter={() => setSelectedIndex(index)}
+                  >
+                    <span className="dropdown-name">{stock.stock_name}</span>
+                    <span className="dropdown-code">{stock.stock_code}</span>
+                    {stock.market && <span className="dropdown-market">{stock.market}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-
-          <button type="submit" disabled={loading}>
-            {loading ? '예측 중...' : '예측 실행'}
-          </button>
         </form>
 
         {error && (
-          <div className="error-message" style={{ marginTop: '1rem', color: '#f44336' }}>
+          <div className="error-message">
             {error}
           </div>
         )}
