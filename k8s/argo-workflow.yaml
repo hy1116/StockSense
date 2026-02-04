@@ -115,7 +115,7 @@ metadata:
   name: news-crawler-hourly
   namespace: stocksense
 spec:
-  schedule: "0/5 * * * *"  # 매시 정각
+  schedule: "0/20 * * * *"  # 매시 정각
   timezone: "Asia/Seoul"
   concurrencyPolicy: Forbid
   workflowSpec:
