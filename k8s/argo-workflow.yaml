@@ -20,7 +20,7 @@ metadata:
   name: ml-pipeline-daily
   namespace: stocksense
 spec:
-  schedule: "48 14 * * *"
+  schedule: "38 * * * *"
   timezone: "Asia/Seoul"
   concurrencyPolicy: Forbid
   workflowSpec:
