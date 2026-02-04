@@ -20,7 +20,7 @@ metadata:
   name: ml-pipeline-daily
   namespace: stocksense
 spec:
-  schedule: "38 * * * *"
+  schedule: "0 6 * * *"
   timezone: "Asia/Seoul"
   concurrencyPolicy: Forbid
   workflowSpec:
@@ -40,7 +40,7 @@ spec:
       steps:
       - - name: init-collection-stocks
           template: run-task
-          arguments: { parameters: [{name: cmd, value: "python -m ml.init_collection_stocks --sync"}] }
+          arguments: { parameters: [{name: cmd, value: "python -m ml.init_collection_stocks --sync --top 100"}] }
       - - name: historical-data
           template: run-task
           arguments: { parameters: [{name: cmd, value: "python -m ml.collect_historical_data"}] }
@@ -107,3 +107,44 @@ spec:
         volumeMounts:
         - name: ml-data
           mountPath: /app/data
+---
+# 뉴스 크롤링 CronWorkflow (1시간마다 실행)
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: news-crawler-hourly
+  namespace: stocksense
+spec:
+  schedule: "0/5 * * * *"  # 매시 정각
+  timezone: "Asia/Seoul"
+  concurrencyPolicy: Forbid
+  workflowSpec:
+    serviceAccountName: default
+    entrypoint: news-crawl-steps
+    ttlStrategy:
+      secondsAfterCompletion: 300
+      secondsAfterSuccess: 60
+      secondsAfterFailure: 3600
+    templates:
+    - name: news-crawl-steps
+      steps:
+      - - name: crawl-news
+          template: run-news-crawler
+          arguments: { parameters: [{name: cmd, value: "python -m ml.crawl_news --all --max-pages 2"}] }
+
+    - name: run-news-crawler
+      inputs:
+        parameters: [{name: cmd}]
+      container:
+        image: stocksense-ml:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args: ["{{inputs.parameters.cmd}}"]
+        env:
+        - name: TZ
+          value: "Asia/Seoul"
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: stocksense-config
+              key: DATABASE_URL
