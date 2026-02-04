@@ -31,6 +31,10 @@ spec:
         ports:
         - containerPort: 5432
         env:
+        - name: TZ
+          value: "Asia/Seoul"
+        - name: PGTZ
+          value: "Asia/Seoul"
         - name: POSTGRES_DB
           valueFrom:
             configMapKeyRef:
