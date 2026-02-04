@@ -89,21 +89,8 @@ async def search_stocks(
 async def get_portfolio_balance(
     client: KISAPIClient = Depends(get_kis_client)
 ):
-    """계좌 잔고 및 포트폴리오 조회 (Redis 캐시 5분)"""
+    """계좌 잔고 및 포트폴리오 조회"""
     try:
-        # redis = get_redis_client()
-        # cache_key = "portfolio:balance"
-
-        # 1. Redis 캐시 확인
-        # if redis.is_available():
-        #     cached_data = redis.get(cache_key)
-        #     if cached_data:
-        #         try:
-        #             cached_dict = json.loads(cached_data)
-        #             return PortfolioSummary(**cached_dict)
-        #         except Exception:
-        #             pass
-
         # 2. KIS API 호출
         result = client.get_balance()
 
@@ -134,23 +121,20 @@ async def get_portfolio_balance(
             )
             holdings.append(holding)
 
+        # 수익률 계산
+        evlu_pfls_smtl_amt=float(output2.get("evlu_pfls_smtl_amt", 0))
+        pchs_amt_smtl_amt=float(output2.get("pchs_amt_smtl_amt", 0))
+
         summary = PortfolioSummary(
             total_asset=float(output2.get("tot_evlu_amt", 0)),
             cash=float(output2.get("dnca_tot_amt", 0)),
             stock_eval_amount=float(output2.get("scts_evlu_amt", 0)),
-            total_profit_loss=float(output2.get("evlu_pfls_smtl_amt", 0)),
-            total_profit_rate=float(output2.get("tot_evlu_pfls_rt", 0)),
+            total_profit_loss=evlu_pfls_smtl_amt,
+            pchs_amt_smtl_amt=pchs_amt_smtl_amt,
+            total_profit_rate= round(evlu_pfls_smtl_amt/pchs_amt_smtl_amt*100, 2) if pchs_amt_smtl_amt else 0,
             holdings=holdings
         )
-
-        # 3. Redis에 캐싱 (5분 = 300초)
-        # if redis.is_available():
-        #     try:
-        #         cache_data = json.dumps(summary.model_dump())
-        #         redis.set(cache_key, cache_data, expire=300)
-        #     except Exception:
-        #         pass
-
+        
         return summary
 
     except Exception as e:
@@ -401,17 +385,7 @@ async def get_market_cap_stocks(
         redis = get_redis_client()
         cache_key = f"top_market_cap_stocks:limit_{limit}"
 
-        # 1. Redis 캐시 확인
-        if redis.is_available():
-            cached_data = redis.get(cache_key)
-            if cached_data:
-                try:
-                    cached_dict = json.loads(cached_data)
-                    return TopStocksResponse(**cached_dict)
-                except Exception:
-                    pass
-
-        # 2. KIS API 호출 (시가총액 순위)
+        # KIS API 호출 (시가총액 순위)
         result = client.get_market_cap_ranking(top_n=limit)
 
         if result.get("rt_cd") != "0":
@@ -435,14 +409,6 @@ async def get_market_cap_stocks(
             stocks.append(stock)
 
         response = TopStocksResponse(stocks=stocks)
-
-        # 3. Redis에 캐싱 (10분 = 600초)
-        if redis.is_available():
-            try:
-                cache_data = json.dumps(response.model_dump())
-                redis.set(cache_key, cache_data, expire=600)
-            except Exception:
-                pass
 
         return response
 
