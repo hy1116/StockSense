@@ -1,9 +1,9 @@
 """뉴스 크롤링 배치 스크립트
 
-일별로 실행하여 종목별 뉴스를 수집합니다.
+1시간마다 실행하여 종목별 뉴스를 수집합니다.
 
 Usage:
-    # 기본 실행 (관심 종목만)
+    # 기본 실행 (관심 종목, 최근 1시간 뉴스만)
     python -m ml.crawl_news
 
     # 모든 수집 대상 종목
@@ -11,6 +11,9 @@ Usage:
 
     # 특정 종목만
     python -m ml.crawl_news --stock-code 005930 --stock-name 삼성전자
+
+    # 최근 N시간 뉴스
+    python -m ml.crawl_news --hours 2
 
     # 최근 N일 뉴스 (네이버 검색 사용)
     python -m ml.crawl_news --days 7 --use-search
@@ -20,7 +23,7 @@ import os
 import asyncio
 import argparse
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # 프로젝트 루트 설정
 project_root = Path(__file__).parent.parent
@@ -36,9 +39,18 @@ async def crawl_news_for_stocks(
     stocks: list,
     max_pages: int = 3,
     use_search: bool = False,
-    days: int = 7
+    days: int = 7,
+    hours: int = None
 ):
-    """여러 종목의 뉴스 크롤링"""
+    """여러 종목의 뉴스 크롤링
+
+    Args:
+        stocks: 종목 리스트 [{'code': '005930', 'name': '삼성전자'}, ...]
+        max_pages: 크롤링할 최대 페이지 수
+        use_search: 네이버 검색 사용 여부
+        days: 최근 N일 (use_search=True일 때 사용)
+        hours: 최근 N시간 내 뉴스만 필터링 (None이면 필터링 안함)
+    """
     from dotenv import load_dotenv
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import sessionmaker
@@ -54,15 +66,23 @@ async def crawl_news_for_stocks(
     engine = create_engine(db_url)
     Session = sessionmaker(bind=engine)
 
+    # 시간 필터 기준
+    time_threshold = None
+    if hours:
+        time_threshold = datetime.now() - timedelta(hours=hours)
+
     total_crawled = 0
     total_saved = 0
     total_duplicate = 0
+    total_filtered = 0
 
     print(f"\n{'='*60}")
     print(f"📰 News Crawling Batch Started")
     print(f"   Stocks: {len(stocks)}")
     print(f"   Method: {'Search' if use_search else 'Finance News'}")
     print(f"   Max Pages: {max_pages}")
+    if hours:
+        print(f"   Time Filter: Last {hours} hour(s)")
     print(f"{'='*60}\n")
 
     for stock in stocks:
@@ -89,11 +109,18 @@ async def crawl_news_for_stocks(
             crawled_count = len(news_list)
             saved_count = 0
             duplicate_count = 0
+            filtered_count = 0
 
             # DB에 저장
             with Session() as session:
                 for news_item in news_list:
                     try:
+                        # 시간 필터링 (hours 옵션이 있을 때)
+                        if time_threshold and news_item.get('published_at'):
+                            if news_item['published_at'] < time_threshold:
+                                filtered_count += 1
+                                continue
+
                         # 중복 체크
                         existing = session.execute(
                             select(StockNews).where(StockNews.url == news_item['url'])
@@ -126,8 +153,9 @@ async def crawl_news_for_stocks(
             total_crawled += crawled_count
             total_saved += saved_count
             total_duplicate += duplicate_count
+            total_filtered += filtered_count
 
-            print(f"   ✅ Crawled: {crawled_count}, Saved: {saved_count}, Duplicates: {duplicate_count}")
+            print(f"   ✅ Crawled: {crawled_count}, Saved: {saved_count}, Duplicates: {duplicate_count}, Filtered(old): {filtered_count}")
 
             # 요청 간 딜레이
             await asyncio.sleep(1)
@@ -141,12 +169,14 @@ async def crawl_news_for_stocks(
     print(f"   Total Crawled: {total_crawled}")
     print(f"   Total Saved: {total_saved}")
     print(f"   Total Duplicates: {total_duplicate}")
+    print(f"   Total Filtered (old): {total_filtered}")
     print(f"{'='*60}\n")
 
     return {
         'total_crawled': total_crawled,
         'total_saved': total_saved,
-        'total_duplicate': total_duplicate
+        'total_duplicate': total_duplicate,
+        'total_filtered': total_filtered
     }
 
 
@@ -206,12 +236,14 @@ async def main():
                         help='Specific stock code')
     parser.add_argument('--stock-name', '-n', type=str,
                         help='Specific stock name')
-    parser.add_argument('--max-pages', '-p', type=int, default=3,
-                        help='Max pages to crawl (default: 3)')
+    parser.add_argument('--max-pages', '-p', type=int, default=2,
+                        help='Max pages to crawl (default: 2)')
     parser.add_argument('--use-search', '-s', action='store_true',
                         help='Use Naver search instead of finance news')
     parser.add_argument('--days', '-d', type=int, default=7,
                         help='Days to search (only with --use-search)')
+    parser.add_argument('--hours', '-H', type=int, default=1,
+                        help='Filter news within last N hours (default: 1, 0=no filter)')
 
     args = parser.parse_args()
 
@@ -236,12 +268,16 @@ async def main():
     if len(stocks) > 5:
         print(f"   ... and {len(stocks) - 5} more")
 
+    # 시간 필터 (0이면 필터링 안함)
+    hours_filter = args.hours if args.hours > 0 else None
+
     # 크롤링 실행
     result = await crawl_news_for_stocks(
         stocks=stocks,
         max_pages=args.max_pages,
         use_search=args.use_search,
-        days=args.days
+        days=args.days,
+        hours=hours_filter
     )
 
     print(f"\n✅ News crawling completed at {datetime.now().isoformat()}")

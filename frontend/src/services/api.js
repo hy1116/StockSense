@@ -207,4 +207,20 @@ export const deleteComment = async (commentId) => {
   return response.data
 }
 
+// ===== News API =====
+
+export const getStockNews = async (stockCode, page = 1, pageSize = 10, days = null) => {
+  const params = { page, page_size: pageSize }
+  if (days) params.days = days
+  const response = await api.get(`/api/news/${stockCode}`, { params })
+  return response.data
+}
+
+export const getNewsSentimentStats = async (stockCode, days = 7) => {
+  const response = await api.get(`/api/news/${stockCode}/stats`, {
+    params: { days }
+  })
+  return response.data
+}
+
 export default api

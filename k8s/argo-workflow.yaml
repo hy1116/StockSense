@@ -130,7 +130,7 @@ spec:
       steps:
       - - name: crawl-news
           template: run-news-crawler
-          arguments: { parameters: [{name: cmd, value: "python -m ml.crawl_news --all --max-pages 2"}] }
+          arguments: { parameters: [{name: cmd, value: "python -m ml.crawl_news --all --max-pages 2 --hours 1"}] }
 
     - name: run-news-crawler
       inputs:

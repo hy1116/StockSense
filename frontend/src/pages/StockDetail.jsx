@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { getStockDetail, getComments, createComment, updateComment, deleteComment } from '../services/api'
+import { getStockDetail, getComments, createComment, updateComment, deleteComment, getStockNews } from '../services/api'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -47,6 +47,13 @@ function StockDetail() {
   const [editingContent, setEditingContent] = useState('')
   const [commentSubmitting, setCommentSubmitting] = useState(false)
 
+  // 뉴스 관련 state
+  const [news, setNews] = useState([])
+  const [newsLoading, setNewsLoading] = useState(false)
+  const [newsPage, setNewsPage] = useState(1)
+  const [hasMoreNews, setHasMoreNews] = useState(false)
+  const [totalNews, setTotalNews] = useState(0)
+
   useEffect(() => {
     fetchStockDetail()
   }, [symbol, period])
@@ -54,6 +61,7 @@ function StockDetail() {
   useEffect(() => {
     if (symbol) {
       fetchComments(1)
+      fetchNews(1)
     }
   }, [symbol])
 
@@ -138,6 +146,43 @@ function StockDetail() {
     } catch (err) {
       alert(err.response?.data?.detail || '댓글 삭제에 실패했습니다')
     }
+  }
+
+  // 뉴스 목록 조회
+  const fetchNews = async (page = 1) => {
+    setNewsLoading(true)
+    try {
+      const response = await getStockNews(symbol, page, 3, 7) // 최근 7일 뉴스
+      if (page === 1) {
+        setNews(response.news)
+      } else {
+        setNews(prev => [...prev, ...response.news])
+      }
+      setNewsPage(page)
+      setHasMoreNews(response.has_more)
+      setTotalNews(response.total)
+    } catch (err) {
+      console.error('Error fetching news:', err)
+    } finally {
+      setNewsLoading(false)
+    }
+  }
+
+  // 뉴스 시간 포맷
+  const formatNewsTime = (dateString) => {
+    if (!dateString) return ''
+    const date = new Date(dateString)
+    const now = new Date()
+    const diff = (now - date) / 1000
+
+    if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
+    if (diff < 604800) return `${Math.floor(diff / 86400)}일 전`
+
+    return date.toLocaleDateString('ko-KR', {
+      month: 'short',
+      day: 'numeric'
+    })
   }
 
   // 댓글 시간 포맷
@@ -445,6 +490,55 @@ function StockDetail() {
           </div>
         </div>
       )}
+
+      {/* 뉴스 섹션 */}
+      <div className="card">
+        <h2>관련 뉴스 ({totalNews})</h2>
+
+        <div className="news-list">
+          {news.length === 0 && !newsLoading ? (
+            <div className="no-news">
+              최근 뉴스가 없습니다.
+            </div>
+          ) : (
+            news.map((item) => (
+              <a
+                key={item.id}
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="news-item"
+              >
+                <div className="news-content">
+                  <div className="news-title">{item.title}</div>
+                  <div className="news-meta">
+                    {item.source && <span className="news-source">{item.source}</span>}
+                    <span className="news-time">{formatNewsTime(item.published_at)}</span>
+                  </div>
+                </div>
+                {item.image_url && (
+                  <div className="news-thumbnail">
+                    <img src={item.image_url} alt="" loading="lazy" />
+                  </div>
+                )}
+              </a>
+            ))
+          )}
+
+          {newsLoading && (
+            <div className="news-loading">뉴스를 불러오는 중...</div>
+          )}
+
+          {hasMoreNews && !newsLoading && (
+            <button
+              className="load-more-btn"
+              onClick={() => fetchNews(newsPage + 1)}
+            >
+              더 보기
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* 댓글 섹션 */}
       <div className="card">
