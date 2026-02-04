@@ -8,7 +8,7 @@ import logging
 
 from h11 import Request
 
-from app.api import portfolio, prediction, auth
+from app.api import portfolio, prediction, auth, comment, ml_model
 from app.database import init_db, close_db
 from app.config import get_settings
 
@@ -101,6 +101,8 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(portfolio.router)
 app.include_router(prediction.router)
+app.include_router(comment.router)
+app.include_router(ml_model.router)
 
 
 @app.get("/")

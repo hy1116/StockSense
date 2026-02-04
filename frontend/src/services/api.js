@@ -122,6 +122,7 @@ export const searchStocks = async (query, limit = 10) => {
 export const authRegister = async (data) => {
   const response = await api.post('/api/auth/register', {
     username: data.username,
+    nickname: data.nickname,
     password: data.password,
     kis_api_key: data.kisApiKey,
     kis_api_secret: data.kisApiSecret,
@@ -156,6 +157,35 @@ export const authGetMe = async () => {
 
 export const checkUsername = async (username) => {
   const response = await api.get(`/api/auth/check-username/${username}`)
+  return response.data
+}
+
+export const checkNickname = async (nickname) => {
+  const response = await api.get(`/api/auth/check-nickname/${nickname}`)
+  return response.data
+}
+
+// ===== Comments API =====
+
+export const getComments = async (stockCode, page = 1, pageSize = 20) => {
+  const response = await api.get(`/api/comments/${stockCode}`, {
+    params: { page, page_size: pageSize }
+  })
+  return response.data
+}
+
+export const createComment = async (stockCode, content) => {
+  const response = await api.post(`/api/comments/${stockCode}`, { content })
+  return response.data
+}
+
+export const updateComment = async (commentId, content) => {
+  const response = await api.put(`/api/comments/${commentId}`, { content })
+  return response.data
+}
+
+export const deleteComment = async (commentId) => {
+  const response = await api.delete(`/api/comments/${commentId}`)
   return response.data
 }
 

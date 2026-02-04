@@ -1,6 +1,8 @@
 import { useParams } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import { useAuth } from '../contexts/AuthContext'
+import { getComments, createComment, updateComment, deleteComment } from '../services/api'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -31,14 +33,32 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 function StockDetail() {
   const { symbol } = useParams()
+  const { isLoggedIn, user } = useAuth()
   const [stockData, setStockData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [period, setPeriod] = useState('D')
 
+  // 댓글 관련 state
+  const [comments, setComments] = useState([])
+  const [commentLoading, setCommentLoading] = useState(false)
+  const [commentPage, setCommentPage] = useState(1)
+  const [hasMoreComments, setHasMoreComments] = useState(false)
+  const [totalComments, setTotalComments] = useState(0)
+  const [newComment, setNewComment] = useState('')
+  const [editingCommentId, setEditingCommentId] = useState(null)
+  const [editingContent, setEditingContent] = useState('')
+  const [commentSubmitting, setCommentSubmitting] = useState(false)
+
   useEffect(() => {
     fetchStockDetail()
   }, [symbol, period])
+
+  useEffect(() => {
+    if (symbol) {
+      fetchComments(1)
+    }
+  }, [symbol])
 
   const fetchStockDetail = async () => {
     setLoading(true)
@@ -56,6 +76,92 @@ function StockDetail() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // 댓글 목록 조회
+  const fetchComments = async (page = 1) => {
+    setCommentLoading(true)
+    try {
+      const response = await getComments(symbol, page, 20)
+      if (page === 1) {
+        setComments(response.comments)
+      } else {
+        setComments(prev => [...prev, ...response.comments])
+      }
+      setCommentPage(page)
+      setHasMoreComments(response.has_more)
+      setTotalComments(response.total)
+    } catch (err) {
+      console.error('Error fetching comments:', err)
+    } finally {
+      setCommentLoading(false)
+    }
+  }
+
+  // 댓글 작성
+  const handleSubmitComment = async (e) => {
+    e.preventDefault()
+    if (!newComment.trim() || commentSubmitting) return
+
+    setCommentSubmitting(true)
+    try {
+      const response = await createComment(symbol, newComment.trim())
+      setComments(prev => [response, ...prev])
+      setTotalComments(prev => prev + 1)
+      setNewComment('')
+    } catch (err) {
+      alert(err.response?.data?.detail || '댓글 작성에 실패했습니다')
+    } finally {
+      setCommentSubmitting(false)
+    }
+  }
+
+  // 댓글 수정
+  const handleUpdateComment = async (commentId) => {
+    if (!editingContent.trim() || commentSubmitting) return
+
+    setCommentSubmitting(true)
+    try {
+      const response = await updateComment(commentId, editingContent.trim())
+      setComments(prev => prev.map(c => c.id === commentId ? response : c))
+      setEditingCommentId(null)
+      setEditingContent('')
+    } catch (err) {
+      alert(err.response?.data?.detail || '댓글 수정에 실패했습니다')
+    } finally {
+      setCommentSubmitting(false)
+    }
+  }
+
+  // 댓글 삭제
+  const handleDeleteComment = async (commentId) => {
+    if (!confirm('댓글을 삭제하시겠습니까?')) return
+
+    try {
+      await deleteComment(commentId)
+      setComments(prev => prev.filter(c => c.id !== commentId))
+      setTotalComments(prev => prev - 1)
+    } catch (err) {
+      alert(err.response?.data?.detail || '댓글 삭제에 실패했습니다')
+    }
+  }
+
+  // 댓글 시간 포맷
+  const formatCommentTime = (dateString) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diff = (now - date) / 1000
+
+    if (diff < 60) return '방금 전'
+    if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
+    if (diff < 604800) return `${Math.floor(diff / 86400)}일 전`
+
+    return date.toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
   }
 
   const formatNumber = (num) => {
@@ -345,6 +451,128 @@ function StockDetail() {
           </div>
         </div>
       )}
+
+      {/* 댓글 섹션 */}
+      <div className="card">
+        <h2>커뮤니티 ({totalComments})</h2>
+
+        {/* 댓글 작성 폼 */}
+        {isLoggedIn ? (
+          <form className="comment-form" onSubmit={handleSubmitComment}>
+            <div className="comment-input-wrapper">
+              <textarea
+                className="comment-input"
+                placeholder="이 종목에 대한 의견을 남겨주세요..."
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                maxLength={1000}
+                rows={3}
+              />
+              <div className="comment-form-footer">
+                <span className="char-count">{newComment.length}/1000</span>
+                <button
+                  type="submit"
+                  className="comment-submit-btn"
+                  disabled={!newComment.trim() || commentSubmitting}
+                >
+                  {commentSubmitting ? '작성 중...' : '작성'}
+                </button>
+              </div>
+            </div>
+          </form>
+        ) : (
+          <div className="login-prompt">
+            로그인하면 댓글을 작성할 수 있습니다.
+          </div>
+        )}
+
+        {/* 댓글 목록 */}
+        <div className="comments-list">
+          {comments.length === 0 && !commentLoading ? (
+            <div className="no-comments">
+              아직 댓글이 없습니다. 첫 번째 댓글을 남겨보세요!
+            </div>
+          ) : (
+            comments.map((comment) => (
+              <div key={comment.id} className="comment-item">
+                <div className="comment-header">
+                  <span className="comment-author">{comment.username}</span>
+                  <span className="comment-time">{formatCommentTime(comment.created_at)}</span>
+                  {comment.updated_at && (
+                    <span className="comment-edited">(수정됨)</span>
+                  )}
+                </div>
+
+                {editingCommentId === comment.id ? (
+                  <div className="comment-edit-form">
+                    <textarea
+                      className="comment-input"
+                      value={editingContent}
+                      onChange={(e) => setEditingContent(e.target.value)}
+                      maxLength={1000}
+                      rows={3}
+                    />
+                    <div className="comment-edit-actions">
+                      <button
+                        className="btn-cancel"
+                        onClick={() => {
+                          setEditingCommentId(null)
+                          setEditingContent('')
+                        }}
+                      >
+                        취소
+                      </button>
+                      <button
+                        className="btn-save"
+                        onClick={() => handleUpdateComment(comment.id)}
+                        disabled={!editingContent.trim() || commentSubmitting}
+                      >
+                        저장
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="comment-content">{comment.content}</div>
+                    {comment.is_mine && (
+                      <div className="comment-actions">
+                        <button
+                          className="btn-edit"
+                          onClick={() => {
+                            setEditingCommentId(comment.id)
+                            setEditingContent(comment.content)
+                          }}
+                        >
+                          수정
+                        </button>
+                        <button
+                          className="btn-delete"
+                          onClick={() => handleDeleteComment(comment.id)}
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ))
+          )}
+
+          {commentLoading && (
+            <div className="comment-loading">댓글을 불러오는 중...</div>
+          )}
+
+          {hasMoreComments && !commentLoading && (
+            <button
+              className="load-more-btn"
+              onClick={() => fetchComments(commentPage + 1)}
+            >
+              더 보기
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

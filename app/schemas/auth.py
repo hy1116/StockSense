@@ -6,6 +6,7 @@ from typing import Optional
 class RegisterRequest(BaseModel):
     """회원가입 요청"""
     username: str = Field(..., min_length=4, max_length=50, description="사용자 아이디")
+    nickname: str = Field(..., min_length=2, max_length=30, description="닉네임")
     password: str = Field(..., min_length=6, description="비밀번호")
     kis_api_key: str = Field(..., description="한국투자증권 App Key")
     kis_api_secret: str = Field(..., description="한국투자증권 App Secret")
@@ -31,6 +32,7 @@ class LoginResponse(BaseModel):
     success: bool
     message: str
     username: Optional[str] = None
+    nickname: Optional[str] = None
     account_no: Optional[str] = None
     access_token: Optional[str] = None
 
@@ -38,6 +40,7 @@ class LoginResponse(BaseModel):
 class UserInfo(BaseModel):
     """사용자 정보"""
     username: str
+    nickname: Optional[str] = None
     account_no: Optional[str] = None
     is_authenticated: bool = True
 

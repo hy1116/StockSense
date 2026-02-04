@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { checkUsername } from '../services/api'
+import { checkUsername, checkNickname } from '../services/api'
 import './Login.css'
 
 function Register() {
@@ -10,6 +10,7 @@ function Register() {
   const [step, setStep] = useState(1) // 1: 계정정보, 2: KIS API 정보
   const [formData, setFormData] = useState({
     username: '',
+    nickname: '',
     password: '',
     passwordConfirm: '',
     kisApiKey: '',
@@ -19,6 +20,7 @@ function Register() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [usernameStatus, setUsernameStatus] = useState({ checked: false, available: false })
+  const [nicknameStatus, setNicknameStatus] = useState({ checked: false, available: false })
   const [showSecrets, setShowSecrets] = useState({
     password: false,
     kisApiKey: false,
@@ -36,6 +38,10 @@ function Register() {
     // 아이디 변경 시 중복확인 초기화
     if (name === 'username') {
       setUsernameStatus({ checked: false, available: false })
+    }
+    // 닉네임 변경 시 중복확인 초기화
+    if (name === 'nickname') {
+      setNicknameStatus({ checked: false, available: false })
     }
   }
 
@@ -56,6 +62,23 @@ function Register() {
     }
   }
 
+  const handleCheckNickname = async () => {
+    if (!formData.nickname.trim() || formData.nickname.length < 2) {
+      setError('닉네임은 2자 이상 입력해주세요')
+      return
+    }
+
+    try {
+      const result = await checkNickname(formData.nickname)
+      setNicknameStatus({ checked: true, available: result.available })
+      if (!result.available) {
+        setError('이미 사용 중인 닉네임입니다')
+      }
+    } catch (err) {
+      setError('닉네임 확인 중 오류가 발생했습니다')
+    }
+  }
+
   const validateStep1 = () => {
     if (!formData.username.trim() || formData.username.length < 4) {
       setError('아이디는 4자 이상 입력해주세요')
@@ -63,6 +86,14 @@ function Register() {
     }
     if (!usernameStatus.checked || !usernameStatus.available) {
       setError('아이디 중복확인을 해주세요')
+      return false
+    }
+    if (!formData.nickname.trim() || formData.nickname.length < 2) {
+      setError('닉네임은 2자 이상 입력해주세요')
+      return false
+    }
+    if (!nicknameStatus.checked || !nicknameStatus.available) {
+      setError('닉네임 중복확인을 해주세요')
       return false
     }
     if (!formData.password || formData.password.length < 6) {
@@ -107,6 +138,7 @@ function Register() {
     try {
       const result = await register({
         username: formData.username,
+        nickname: formData.nickname,
         password: formData.password,
         kisApiKey: formData.kisApiKey,
         kisApiSecret: formData.kisApiSecret,
@@ -180,6 +212,32 @@ function Register() {
                 </div>
                 {usernameStatus.checked && usernameStatus.available && (
                   <span className="success-text">사용 가능한 아이디입니다</span>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="nickname">닉네임</label>
+                <div className="input-with-button">
+                  <input
+                    type="text"
+                    id="nickname"
+                    name="nickname"
+                    value={formData.nickname}
+                    onChange={handleChange}
+                    placeholder="2자 이상 입력 (커뮤니티에서 표시)"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className="check-button"
+                    onClick={handleCheckNickname}
+                    disabled={formData.nickname.length < 2}
+                  >
+                    중복확인
+                  </button>
+                </div>
+                {nicknameStatus.checked && nicknameStatus.available && (
+                  <span className="success-text">사용 가능한 닉네임입니다</span>
                 )}
               </div>
 

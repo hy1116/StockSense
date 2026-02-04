@@ -66,6 +66,7 @@ async def get_current_user(
 
     return UserInfo(
         username=session["username"],
+        nickname=session.get("nickname"),
         account_no=session.get("account_no"),
         is_authenticated=True
     )
@@ -94,6 +95,18 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
             return RegisterResponse(
                 success=False,
                 message="이미 사용 중인 아이디입니다"
+            )
+
+        # 1-1. 닉네임 중복 확인
+        result = await db.execute(
+            select(User).where(User.nickname == request.nickname)
+        )
+        existing_nickname = result.scalar_one_or_none()
+
+        if existing_nickname:
+            return RegisterResponse(
+                success=False,
+                message="이미 사용 중인 닉네임입니다"
             )
 
         # 2. KIS API 검증
@@ -127,6 +140,7 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
         # 3. 사용자 생성 (API Key/Secret 암호화)
         new_user = User(
             username=request.username,
+            nickname=request.nickname,
             password_hash=hash_password(request.password),
             kis_api_key=encrypt_data(request.kis_api_key),
             kis_api_secret=encrypt_data(request.kis_api_secret),
@@ -195,6 +209,7 @@ async def login(
         session_id = session_manager.create_session(
             user_id=user.id,
             username=user.username,
+            nickname=user.nickname,
             account_no=user.kis_account_no
         )
 
@@ -224,6 +239,7 @@ async def login(
             success=True,
             message="로그인 성공",
             username=user.username,
+            nickname=user.nickname,
             account_no=user.kis_account_no,
             access_token=access_token
         )
@@ -277,11 +293,13 @@ async def check_auth(user: Optional[UserInfo] = Depends(get_current_user)):
         return {
             "authenticated": True,
             "username": user.username,
+            "nickname": user.nickname,
             "account_no": user.account_no
         }
     return {
         "authenticated": False,
         "username": None,
+        "nickname": None,
         "account_no": None
     }
 
@@ -297,4 +315,18 @@ async def check_username(username: str, db: AsyncSession = Depends(get_db)):
     return {
         "available": existing is None,
         "message": "사용 가능한 아이디입니다" if existing is None else "이미 사용 중인 아이디입니다"
+    }
+
+
+@router.get("/check-nickname/{nickname}")
+async def check_nickname(nickname: str, db: AsyncSession = Depends(get_db)):
+    """닉네임 중복 확인"""
+    result = await db.execute(
+        select(User).where(User.nickname == nickname)
+    )
+    existing = result.scalar_one_or_none()
+
+    return {
+        "available": existing is None,
+        "message": "사용 가능한 닉네임입니다" if existing is None else "이미 사용 중인 닉네임입니다"
     }

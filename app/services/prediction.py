@@ -1,5 +1,7 @@
 """주가 예측 서비스"""
 import logging
+import pickle
+import json
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -9,29 +11,47 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 import joblib
 
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
+
 logger = logging.getLogger(__name__)
 
 
 class PredictionService:
     """주가 예측 서비스 (ML 모델 + 기술적 지표 기반)"""
 
-    def __init__(self, use_ml: bool = True, model_dir: str = "./models"):
+    def __init__(self, use_ml: bool = True, model_dir: str = "./models", use_db: bool = True):
         """
         Args:
             use_ml: ML 모델 사용 여부 (True: ML 모델, False: 룰 기반)
-            model_dir: 모델 파일 디렉토리
+            model_dir: 모델 파일 디렉토리 (fallback용)
+            use_db: DB에서 모델 로드 여부 (True: DB 우선, False: 파일만)
         """
         self.use_ml = use_ml
+        self.use_db = use_db
         self.model_dir = Path(model_dir)
         self.ml_model = None
         self.ml_scaler = None
         self.feature_columns = []
+        self.model_version = None
+        self.model_info = {}
 
         # ML 모델 로드 시도
         if self.use_ml:
             try:
-                self._load_ml_model()
-                logger.info("✅ ML model loaded successfully")
+                # 1. DB에서 활성 모델 로드 시도
+                if self.use_db:
+                    self._load_ml_model_from_db()
+
+                # 2. DB 로드 실패 시 파일에서 로드
+                if self.ml_model is None:
+                    self._load_ml_model_from_file()
+
+                if self.ml_model is not None:
+                    logger.info(f"✅ ML model loaded successfully (version: {self.model_version})")
+                else:
+                    raise Exception("No model available")
+
             except Exception as e:
                 logger.warning(f"⚠️ Failed to load ML model: {e}. Falling back to rule-based prediction.")
                 self.use_ml = False
@@ -39,8 +59,79 @@ class PredictionService:
         # 룰 기반 예측용 스케일러
         self.scaler = MinMaxScaler(feature_range=(0, 1))
 
-    def _load_ml_model(self):
-        """ML 모델 로드"""
+    def _load_ml_model_from_db(self):
+        """DB에서 활성화된 ML 모델 로드"""
+        try:
+            from app.config import get_settings
+            from app.models.ml_model import ModelTrainingHistory
+
+            settings = get_settings()
+            # async URL을 sync URL로 변환
+            db_url = settings.database_url.replace("+asyncpg", "")
+            engine = create_engine(db_url)
+            Session = sessionmaker(bind=engine)
+
+            with Session() as session:
+                # 활성 모델 조회
+                result = session.execute(
+                    select(ModelTrainingHistory)
+                    .where(ModelTrainingHistory.is_active == True)
+                    .order_by(ModelTrainingHistory.trained_at.desc())
+                    .limit(1)
+                )
+                active_model = result.scalar_one_or_none()
+
+                if active_model is None:
+                    logger.info("📭 No active model found in DB")
+                    return
+
+                # 모델 바이너리 역직렬화
+                if active_model.model_binary is None or active_model.scaler_binary is None:
+                    logger.warning("⚠️ Active model has no binary data")
+                    return
+
+                self.ml_model = pickle.loads(active_model.model_binary)
+                self.ml_scaler = pickle.loads(active_model.scaler_binary)
+
+                # 피처 컬럼 로드
+                if active_model.feature_columns:
+                    self.feature_columns = json.loads(active_model.feature_columns)
+                else:
+                    self.feature_columns = self._get_default_feature_columns()
+
+                # 모델 정보 저장
+                self.model_version = active_model.model_version
+                self.model_info = {
+                    'id': active_model.id,
+                    'model_name': active_model.model_name,
+                    'model_type': active_model.model_type,
+                    'version': active_model.model_version,
+                    'trained_at': active_model.trained_at.isoformat() if active_model.trained_at else None,
+                    'test_score': active_model.test_score,
+                    'mae': active_model.mae,
+                    'rmse': active_model.rmse,
+                    'train_samples': active_model.train_samples
+                }
+
+                logger.info(f"📦 Model loaded from DB: {active_model.model_name} "
+                          f"(version={active_model.model_version}, test_score={active_model.test_score:.4f})")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load model from DB: {e}")
+            self.ml_model = None
+
+    def _get_default_feature_columns(self) -> list:
+        """기본 피처 컬럼 반환"""
+        return [
+            'open', 'high', 'low', 'close', 'volume',
+            'ma5', 'ma10', 'ma20', 'rsi',
+            'bb_upper', 'bb_middle', 'bb_lower',
+            'macd', 'macd_signal', 'macd_diff',
+            'price_change_1d', 'volume_change'
+        ]
+
+    def _load_ml_model_from_file(self):
+        """파일에서 ML 모델 로드 (DB 실패 시 fallback)"""
         model_path = self.model_dir / "stock_prediction_v1.pkl"
         scaler_path = self.model_dir / "scaler.pkl"
         metadata_path = self.model_dir / "metadata.json"
@@ -57,21 +148,26 @@ class PredictionService:
 
         # 메타데이터에서 피처 컬럼 정보 로드
         if metadata_path.exists():
-            import json
             with open(metadata_path, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
                 self.feature_columns = metadata.get('feature_columns', [])
-                logger.info(f"📊 Model metadata: trained_at={metadata.get('trained_at')}, "
-                          f"test_score={metadata.get('test_score'):.4f}")
+                self.model_version = metadata.get('version', 'file')
+                self.model_info = {
+                    'model_name': metadata.get('model_name'),
+                    'model_type': metadata.get('model_type'),
+                    'version': metadata.get('version'),
+                    'trained_at': metadata.get('trained_at'),
+                    'test_score': metadata.get('test_score'),
+                    'n_samples': metadata.get('n_samples')
+                }
+                logger.info(f"📁 Model loaded from file: {model_path.name} "
+                          f"(version={self.model_version}, test_score={metadata.get('test_score', 'N/A')})")
         else:
             # 기본 피처 컬럼
-            self.feature_columns = [
-                'open', 'high', 'low', 'close', 'volume',
-                'ma5', 'ma10', 'ma20', 'rsi',
-                'bb_upper', 'bb_middle', 'bb_lower',
-                'macd', 'macd_signal', 'macd_diff',
-                'price_change_1d', 'volume_change'
-            ]
+            self.feature_columns = self._get_default_feature_columns()
+            self.model_version = 'file'
+            self.model_info = {'source': 'file'}
+            logger.info(f"📁 Model loaded from file (no metadata): {model_path.name}")
 
     def predict_price(self, stock_code: str, stock_name: str, chart_data: List[Dict]) -> Dict:
         """주가 예측
@@ -491,6 +587,17 @@ class PredictionService:
             "confidence": 0.3,
             "trend": "보합",
             "recommendation": "보유"
+        }
+
+
+    def get_model_info(self) -> Dict:
+        """현재 로드된 모델 정보 반환"""
+        return {
+            'use_ml': self.use_ml,
+            'model_loaded': self.ml_model is not None,
+            'model_version': self.model_version,
+            'feature_count': len(self.feature_columns),
+            **self.model_info
         }
 
 

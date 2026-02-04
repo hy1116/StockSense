@@ -22,6 +22,7 @@ export function AuthProvider({ children }) {
         setIsLoggedIn(true)
         setUser({
           username: response.username,
+          nickname: response.nickname,
           accountNo: response.account_no,
         })
       } else {
@@ -66,6 +67,7 @@ export function AuthProvider({ children }) {
         setIsLoggedIn(true)
         setUser({
           username: response.username,
+          nickname: response.nickname,
           accountNo: response.account_no,
         })
 

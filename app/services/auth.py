@@ -101,13 +101,14 @@ class SessionManager:
     def __init__(self):
         self.redis = get_redis_client()
 
-    def create_session(self, user_id: int, username: str, account_no: str = None) -> str:
+    def create_session(self, user_id: int, username: str, nickname: str = None, account_no: str = None) -> str:
         """새 세션 생성"""
         session_id = secrets.token_urlsafe(32)
 
         session_data = {
             "user_id": user_id,
             "username": username,
+            "nickname": nickname,
             "account_no": account_no,
             "created_at": datetime.utcnow().isoformat()
         }
