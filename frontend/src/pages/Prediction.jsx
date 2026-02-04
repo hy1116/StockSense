@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { searchStocks } from '../services/api'
+import { searchStocks, getPrediction } from '../services/api'
 import './Prediction.css'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 function Prediction() {
   const [stockCode, setStockCode] = useState('')
@@ -90,28 +88,9 @@ function Prediction() {
     setPrediction(null)
 
     try {
-      const url = "/api/prediction/"
-      console.log('🚀 Calling API:', url, 'with stock_code:', stockCode.toUpperCase())
+      console.log('🚀 Calling prediction API with stock_code:', stockCode.toUpperCase())
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          stock_code: stockCode.toUpperCase()
-        })
-      })
-
-      console.log('📡 Response status:', response.status)
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error('❌ Error response:', errorData)
-        throw new Error(errorData.detail || '예측을 가져오는데 실패했습니다')
-      }
-
-      const data = await response.json()
+      const data = await getPrediction(stockCode)
       console.log('✅ Prediction data received:', data)
 
       // 데이터 유효성 검사
@@ -123,7 +102,7 @@ function Prediction() {
       setPrediction(data)
     } catch (err) {
       console.error('예측 오류:', err)
-      setError(err.message || '예측 중 오류가 발생했습니다')
+      setError(err.response?.data?.detail || err.message || '예측 중 오류가 발생했습니다')
     } finally {
       setLoading(false)
     }

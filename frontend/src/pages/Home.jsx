@@ -47,11 +47,11 @@ function Home() {
 
   const formatMarketCap = (num) => {
     if (!num) return '-'
-    const 억 = Math.floor(num / 100000000)
-    if (억 >= 10000) {
-      return `${(억 / 10000).toFixed(1)}조`
+    const eog = Math.floor(num / 100000000)
+    if (eog >= 10000) {
+      return `${(eog / 10000).toFixed(1)}조`
     }
-    return `${formatNumber(억)}억`
+    return `${formatNumber(eog)}억`
   }
 
   const getPriceChangeClass = (change) => {

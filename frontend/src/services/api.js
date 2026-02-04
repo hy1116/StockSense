@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -162,6 +162,24 @@ export const checkUsername = async (username) => {
 
 export const checkNickname = async (nickname) => {
   const response = await api.get(`/api/auth/check-nickname/${nickname}`)
+  return response.data
+}
+
+// ===== Prediction API =====
+
+export const getPrediction = async (stockCode) => {
+  const response = await api.post('/api/prediction/', {
+    stock_code: stockCode.toUpperCase()
+  })
+  return response.data
+}
+
+// ===== Stock Detail API =====
+
+export const getStockDetail = async (symbol, period = 'D') => {
+  const response = await api.get(`/api/portfolio/stock/${symbol}/detail`, {
+    params: { period }
+  })
   return response.data
 }
 

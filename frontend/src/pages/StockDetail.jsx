@@ -1,8 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
-import { getComments, createComment, updateComment, deleteComment } from '../services/api'
+import { getStockDetail, getComments, createComment, updateComment, deleteComment } from '../services/api'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -28,8 +27,6 @@ ChartJS.register(
   Legend,
   Filler
 )
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 function StockDetail() {
   const { symbol } = useParams()
@@ -65,11 +62,8 @@ function StockDetail() {
     setError(null)
 
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/api/portfolio/stock/${symbol}/detail`,
-        { params: { period } }
-      )
-      setStockData(response.data)
+      const data = await getStockDetail(symbol, period)
+      setStockData(data)
     } catch (err) {
       setError(err.response?.data?.detail || '데이터를 불러오는데 실패했습니다')
       console.error('Error fetching stock detail:', err)
