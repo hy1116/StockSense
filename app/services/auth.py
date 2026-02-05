@@ -2,7 +2,7 @@
 import json
 import secrets
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import jwt, JWTError
 from cryptography.fernet import Fernet
@@ -16,6 +16,8 @@ from app.services.redis_client import get_redis_client
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+KST = timezone(timedelta(hours=9))
 
 # 비밀번호 해싱
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -65,9 +67,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
 
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.jwt_expire_minutes)
+        expire = datetime.now() + timedelta(minutes=settings.jwt_expire_minutes)
+
+    print(f"expire: {expire}")
 
     to_encode.update({"exp": expire})
 
@@ -110,8 +114,9 @@ class SessionManager:
             "username": username,
             "nickname": nickname,
             "account_no": account_no,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now().isoformat()
         }
+        print(f"created_at: {datetime.now().isoformat()}")
 
         key = f"{self.SESSION_PREFIX}{session_id}"
 
