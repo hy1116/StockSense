@@ -4,8 +4,9 @@ metadata:
   name: stocksense-ingress
   namespace: stocksense
   annotations:
-    # 클라우드 환경에 따라 추가 annotations가 필요할 수 있습니다
-    # cert-manager.io/cluster-issuer: "letsencrypt-prod"  # HTTPS를 위한 예시
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.org/websocket-services: "backend-service"
 spec:
   ingressClassName: nginx  # Ingress Controller에 따라 변경하세요
   rules:

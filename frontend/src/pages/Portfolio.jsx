@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPortfolio, buyStock, sellStock, getStockPrice } from '../services/api'
+import useBalanceWebSocket from '../hooks/useBalanceWebSocket'
 import './Portfolio.css'
 
 function Portfolio() {
@@ -13,11 +14,17 @@ function Portfolio() {
     orderType: '00'
   })
 
-  const { data: portfolio, isLoading, error } = useQuery({
+  // WebSocket 실시간 잔고
+  const { data: wsData, connected: wsConnected } = useBalanceWebSocket(true)
+
+  // HTTP 폴링 (WebSocket 연결 안 됐을 때 fallback)
+  const { data: httpData, isLoading, error } = useQuery({
     queryKey: ['portfolio'],
     queryFn: getPortfolio,
-    refetchInterval: 10000,
+    refetchInterval: wsConnected ? false : 10000,
   })
+
+  const portfolio = wsData || httpData
 
   const buyMutation = useMutation({
     mutationFn: buyStock,
@@ -72,8 +79,8 @@ function Portfolio() {
     })
   }
 
-  if (isLoading) return <div className="loading">로딩 중...</div>
-  if (error) return <div className="error">오류: {error.message}</div>
+  if (isLoading && !wsData) return <div className="loading">로딩 중...</div>
+  if (error && !wsData) return <div className="error">오류: {error.message}</div>
 
   const formatNumber = (num) => {
     return new Intl.NumberFormat('ko-KR').format(num)

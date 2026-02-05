@@ -22,7 +22,10 @@ logger = logging.getLogger("api_logger")
 app = FastAPI()
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request, call_next):
+        # WebSocket 요청은 로깅 미들웨어 스킵
+        if request.url.path.startswith("/api/portfolio/ws/"):
+            return await call_next(request)
         # 1. Request 정보 추출
         start_time = time.time()
         url = request.url.path
