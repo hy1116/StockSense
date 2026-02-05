@@ -1,20 +1,27 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getHealthCheck, getTopStocks, getMarketCapStocks, getPortfolio, searchStocks } from '../services/api'
 import './Home.css'
 
 function Home() {
-  const { isLoggedIn } = useAuth()
-  const [searchTerm, setSearchTerm] = useState('')
-  const [activeTab, setActiveTab] = useState('marketCap') // 'volume' | 'marketCap' | 'holdings'
-  const [searchResults, setSearchResults] = useState([])
-  const [showDropdown, setShowDropdown] = useState(false)
-  const [isSearching, setIsSearching] = useState(false)
-  const [selectedIndex, setSelectedIndex] = useState(-1)
-  const searchRef = useRef(null)
-  const navigate = useNavigate()
+  const { isLoggedIn } = useAuth();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const searchRef = useRef(null);
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const activeTab = searchParams.get('tab') || 'marketCap';
+
+  const handleTabChange = (tabName) => {
+    // 뒤로가기를 지원하려면 replace: false (기본값)로 두세요.
+    setSearchParams({ tab: tabName });
+  };
 
   const { data: health, isLoading } = useQuery({
     queryKey: ['health'],
@@ -216,20 +223,20 @@ function Home() {
           <div className="tab-buttons">
             <button
               className={`tab-button ${activeTab === 'marketCap' ? 'active' : ''}`}
-              onClick={() => setActiveTab('marketCap')}
+              onClick={() => handleTabChange('marketCap')}
             >
               시가총액 상위
             </button>
             <button
               className={`tab-button ${activeTab === 'volume' ? 'active' : ''}`}
-              onClick={() => setActiveTab('volume')}
+              onClick={() => handleTabChange('volume')}
             >
               거래량 상위
             </button>
             {isLoggedIn && (
               <button
                 className={`tab-button ${activeTab === 'holdings' ? 'active' : ''}`}
-                onClick={() => setActiveTab('holdings')}
+                onClick={() => handleTabChange('holdings')}
               >
                 보유 종목
               </button>

@@ -1,32 +1,9 @@
 import { useParams } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { getStockDetail, getComments, createComment, updateComment, deleteComment, getStockNews } from '../services/api'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js'
-import { Line } from 'react-chartjs-2'
+import { createChart } from 'lightweight-charts'
 import './StockDetail.css'
-
-// Chart.js 등록
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-)
 
 function StockDetail() {
   const { symbol } = useParams()
@@ -34,7 +11,7 @@ function StockDetail() {
   const [stockData, setStockData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [period, setPeriod] = useState('D')
+  const [period, setPeriod] = useState('D') // 기본값을 일봉으로
 
   // 댓글 관련 state
   const [comments, setComments] = useState([])
@@ -54,19 +31,18 @@ function StockDetail() {
   const [hasMoreNews, setHasMoreNews] = useState(false)
   const [totalNews, setTotalNews] = useState(0)
 
-  useEffect(() => {
-    fetchStockDetail()
-  }, [symbol, period])
+  // 차트 관련 ref
+  const chartContainerRef = useRef(null)
+  const chartInstanceRef = useRef(null)
+  const candlestickSeriesRef = useRef(null)
+  const volumeSeriesRef = useRef(null)
+  const autoRefreshIntervalRef = useRef(null)
 
-  useEffect(() => {
-    if (symbol) {
-      fetchComments(1)
-      fetchNews(1)
+  // 주식 상세 정보 조회
+  const fetchStockDetail = async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true)
     }
-  }, [symbol])
-
-  const fetchStockDetail = async () => {
-    setLoading(true)
     setError(null)
 
     try {
@@ -76,7 +52,9 @@ function StockDetail() {
       setError(err.response?.data?.detail || '데이터를 불러오는데 실패했습니다')
       console.error('Error fetching stock detail:', err)
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
     }
   }
 
@@ -152,7 +130,7 @@ function StockDetail() {
   const fetchNews = async (page = 1) => {
     setNewsLoading(true)
     try {
-      const response = await getStockNews(symbol, page, 3, 7) // 최근 7일 뉴스
+      const response = await getStockNews(symbol, page, 3, 7)
       if (page === 1) {
         setNews(response.news)
       } else {
@@ -172,9 +150,12 @@ function StockDetail() {
   const formatNewsTime = (dateString) => {
     if (!dateString) return ''
     const date = new Date(dateString)
+    if (isNaN(date.getTime())) return ''
     const now = new Date()
     const diff = (now - date) / 1000
 
+    if (diff < 0) return '방금 전'
+    if (diff < 60) return '방금 전'
     if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
     if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
     if (diff < 604800) return `${Math.floor(diff / 86400)}일 전`
@@ -218,106 +199,203 @@ function StockDetail() {
     return ''
   }
 
-  // 주식 차트 데이터 준비
-  const prepareChartData = () => {
-    if (!stockData || !chart_data || chart_data.length === 0) {
-      return null
+  // lightweight-charts 초기화
+  const initChart = useCallback(() => {
+    if (!chartContainerRef.current || !stockData) return
+
+    const chartData = stockData.chart_data
+    if (!chartData || chartData.length === 0) return
+
+    // 기존 차트 제거
+    if (chartInstanceRef.current) {
+      chartInstanceRef.current.remove()
+      chartInstanceRef.current = null
+      candlestickSeriesRef.current = null
+      volumeSeriesRef.current = null
     }
+
+    // 일봉/주봉/월봉만 지원
+    const isMinute = false
 
     // 날짜순 정렬 (오래된 것부터)
-    const sortedData = [...chart_data].reverse()
+    const sortedData = [...chartData].reverse()
 
-    // 종가 데이터 추출
-    const prices = sortedData.map(d => d.close)
-    const dates = sortedData.map(d => {
-      const date = d.date
-      return `${date.slice(4, 6)}/${date.slice(6, 8)}`
+    // 차트 생성
+    const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: 500,
+      layout: {
+        background: { color: '#1e222d' },
+        textColor: '#d1d4dc',
+      },
+      grid: {
+        vertLines: { color: '#2b2b43' },
+        horzLines: { color: '#2b2b43' },
+      },
+      crosshair: {
+        mode: 1, // Normal mode
+      },
+      rightPriceScale: {
+        borderVisible: false,
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.2, // 거래량을 위한 하단 여백 증가
+        },
+      },
+      timeScale: {
+        borderVisible: false,
+        timeVisible: true, // 항상 시간 표시
+        secondsVisible: false,
+        rightOffset: 1,
+        barSpacing: 10,
+        minBarSpacing: 3,
+      },
     })
 
-    // 가격 변화에 따른 색상 결정
-    const firstPrice = prices[0]
-    const lastPrice = prices[prices.length - 1]
-    const isUp = lastPrice >= firstPrice
+    chartInstanceRef.current = chart
 
-    return {
-      labels: dates,
-      datasets: [
-        {
-          label: '종가',
-          data: prices,
-          borderColor: isUp ? '#ef5350' : '#26a69a',
-          backgroundColor: isUp
-            ? 'rgba(239, 83, 80, 0.1)'
-            : 'rgba(38, 166, 154, 0.1)',
-          borderWidth: 2,
-          fill: true,
-          tension: 0.4,
-          pointRadius: 0,
-          pointHoverRadius: 4,
-          pointHoverBackgroundColor: isUp ? '#ef5350' : '#26a69a',
-          pointHoverBorderColor: '#fff',
-          pointHoverBorderWidth: 2
-        }
-      ]
+    // 캔들스틱 시리즈 추가 (v4 API) - 기본 priceScale 사용
+    const candleSeries = chart.addCandlestickSeries({
+      upColor: '#ef5350',
+      downColor: '#26a69a',
+      borderVisible: true,
+      wickUpColor: '#ef5350',
+      wickDownColor: '#26a69a',
+      borderUpColor: '#ef5350',
+      borderDownColor: '#26a69a',
+    })
+    candlestickSeriesRef.current = candleSeries
+
+    // 거래량 시리즈 추가 (v4 API) - 별도 priceScale 사용
+    const volumeSeries = chart.addHistogramSeries({
+      color: '#26a69a',
+      priceFormat: {
+        type: 'volume',
+      },
+      priceScaleId: 'volume', // 별도 스케일 ID 지정
+    })
+
+    // 거래량 priceScale 설정
+    chart.priceScale('volume').applyOptions({
+      scaleMargins: {
+        top: 0.8, // 상단 85% 지점부터 시작
+        bottom: 0, // 하단 0%
+      },
+    })
+
+    volumeSeriesRef.current = volumeSeries
+
+    // 데이터 변환 및 설정
+    let candleData = []
+    let volumeData = []
+    const seenTimes = new Set() // 중복 시간값 체크
+
+    // 일봉/주봉/월봉: YYYYMMDD → YYYY-MM-DD
+    sortedData.forEach(d => {
+      if (!d.date || d.date.length < 8) return // 유효하지 않은 데이터 건너뛰기
+
+      const time = `${d.date.slice(0, 4)}-${d.date.slice(4, 6)}-${d.date.slice(6, 8)}`
+
+      // 중복 시간값 제거
+      if (seenTimes.has(time)) return
+      seenTimes.add(time)
+
+      // 유효한 OHLC 데이터인지 확인
+      if (d.open > 0 && d.high > 0 && d.low > 0 && d.close > 0) {
+        candleData.push({
+          time: time,
+          open: d.open,
+          high: d.high,
+          low: d.low,
+          close: d.close,
+        })
+
+        volumeData.push({
+          time: time,
+          value: d.volume || 0,
+          color: d.close >= d.open ? '#ef535080' : '#26a69a80',
+        })
+      }
+    })
+
+    candleSeries.setData(candleData)
+    volumeSeries.setData(volumeData)
+
+    // 차트 자동 맞춤
+    chart.timeScale().fitContent()
+
+    // 리사이즈 핸들러
+    const handleResize = () => {
+      if (chartContainerRef.current && chartInstanceRef.current) {
+        chartInstanceRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+        })
+      }
     }
+
+    const resizeObserver = new ResizeObserver(handleResize)
+    if (chartContainerRef.current) {
+      resizeObserver.observe(chartContainerRef.current)
+    }
+
+    return () => {
+      resizeObserver.disconnect()
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.remove()
+        chartInstanceRef.current = null
+        candlestickSeriesRef.current = null
+        volumeSeriesRef.current = null
+      }
+    }
+  }, [stockData, period])
+
+  // 차트 초기화
+  useEffect(() => {
+    const cleanup = initChart()
+    return () => {
+      if (cleanup) cleanup()
+    }
+  }, [initChart])
+
+  // 장 운영 시간 체크 함수 (09:00 ~ 15:30)
+  const isMarketOpen = () => {
+    const now = new Date()
+    const hours = now.getHours()
+    const minutes = now.getMinutes()
+    const currentTime = hours * 100 + minutes
+
+    // 09:00 ~ 15:30 (0900 ~ 1530)
+    return currentTime >= 900 && currentTime <= 1530
   }
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false
-    },
-    plugins: {
-      legend: {
-        display: false
-      },
-      tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        padding: 12,
-        titleColor: '#fff',
-        bodyColor: '#fff',
-        borderColor: 'rgba(255, 255, 255, 0.2)',
-        borderWidth: 1,
-        displayColors: false,
-        callbacks: {
-          title: function(context) {
-            return context[0].label
-          },
-          label: function(context) {
-            return `${formatNumber(context.parsed.y)}원`
-          }
-        }
-      }
-    },
-    scales: {
-      x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          color: 'rgba(255, 255, 255, 0.6)',
-          maxTicksLimit: 8
-        }
-      },
-      y: {
-        position: 'right',
-        grid: {
-          color: 'rgba(255, 255, 255, 0.05)',
-          drawBorder: false
-        },
-        ticks: {
-          color: 'rgba(255, 255, 255, 0.6)',
-          callback: function(value) {
-            return formatNumber(value)
-          }
-        }
+  // 주기적 데이터 갱신 - 장 운영 시간에만 3초마다
+  useEffect(() => {
+    // 초기 로드 (loading 표시)
+    fetchStockDetail(true)
+
+    // 장 운영 시간에만 3초마다 자동 갱신 (loading 표시 안함)
+    if (isMarketOpen()) {
+      autoRefreshIntervalRef.current = setInterval(() => {
+        fetchStockDetail(false)
+      }, 3000)
+    }
+
+    return () => {
+      if (autoRefreshIntervalRef.current) {
+        clearInterval(autoRefreshIntervalRef.current)
       }
     }
-  }
+  }, [symbol, period])
 
-  if (loading) {
+  // 뉴스 및 댓글 로드
+  useEffect(() => {
+    if (symbol) {
+      fetchComments(1)
+      fetchNews(1)
+    }
+  }, [symbol])
+
+  if (loading && !stockData) {
     return (
       <div className="stock-detail">
         <div className="loading">데이터를 불러오는 중...</div>
@@ -373,27 +451,25 @@ function StockDetail() {
               className={period === 'D' ? 'active' : ''}
               onClick={() => setPeriod('D')}
             >
-              일봉
+              일
             </button>
             <button
               className={period === 'W' ? 'active' : ''}
               onClick={() => setPeriod('W')}
             >
-              주봉
+              주
             </button>
             <button
               className={period === 'M' ? 'active' : ''}
               onClick={() => setPeriod('M')}
             >
-              월봉
+              월
             </button>
           </div>
         </div>
         <div className="chart-container">
           {chart_data && chart_data.length > 0 ? (
-            <div style={{ height: '400px', padding: '1rem' }}>
-              <Line data={prepareChartData()} options={chartOptions} />
-            </div>
+            <div ref={chartContainerRef} style={{ position: 'relative', width: '100%', height: '500px' }} />
           ) : (
             <p>차트 데이터가 없습니다</p>
           )}
