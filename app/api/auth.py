@@ -201,7 +201,7 @@ async def login(
             )
 
         # 4. 마지막 로그인 시간 업데이트
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = datetime.now()
         await db.commit()
 
         # 5. Redis에 세션 저장
