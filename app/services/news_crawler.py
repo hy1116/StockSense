@@ -2,9 +2,11 @@
 import logging
 import re
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 from urllib.parse import quote, urljoin
+
+KST = timezone(timedelta(hours=9))
 
 import httpx
 from bs4 import BeautifulSoup
@@ -193,27 +195,30 @@ class NewsCrawler:
             return None
 
     def _parse_date(self, date_str: str) -> Optional[datetime]:
-        """날짜 문자열 파싱"""
+        """날짜 문자열 파싱 (KST timezone-aware)"""
         if not date_str:
             return None
+
+        now = datetime.now(KST)
 
         try:
             # "2024.01.15 10:30" 형식
             if '.' in date_str:
-                return datetime.strptime(date_str, "%Y.%m.%d %H:%M")
+                naive = datetime.strptime(date_str, "%Y.%m.%d %H:%M")
+                return naive.replace(tzinfo=KST)
 
             # "1시간 전", "2일 전" 등
             if '분 전' in date_str:
                 minutes = int(re.search(r'(\d+)', date_str).group(1))
-                return datetime.now() - timedelta(minutes=minutes)
+                return now - timedelta(minutes=minutes)
 
             if '시간 전' in date_str:
                 hours = int(re.search(r'(\d+)', date_str).group(1))
-                return datetime.now() - timedelta(hours=hours)
+                return now - timedelta(hours=hours)
 
             if '일 전' in date_str:
                 days = int(re.search(r'(\d+)', date_str).group(1))
-                return datetime.now() - timedelta(days=days)
+                return now - timedelta(days=days)
 
             return None
 
@@ -338,31 +343,33 @@ class NaverSearchNewsCrawler:
 
     def _get_date_str(self, days: int) -> str:
         """검색 날짜 문자열 생성"""
-        date = datetime.now() - timedelta(days=days)
+        date = datetime.now(KST) - timedelta(days=days)
         return date.strftime("%Y%m%d")
 
     def _parse_relative_date(self, date_str: str) -> Optional[datetime]:
-        """상대 날짜 파싱"""
+        """상대 날짜 파싱 (KST timezone-aware)"""
         if not date_str:
             return None
+
+        now = datetime.now(KST)
 
         try:
             if '분 전' in date_str:
                 minutes = int(re.search(r'(\d+)', date_str).group(1))
-                return datetime.now() - timedelta(minutes=minutes)
+                return now - timedelta(minutes=minutes)
 
             if '시간 전' in date_str:
                 hours = int(re.search(r'(\d+)', date_str).group(1))
-                return datetime.now() - timedelta(hours=hours)
+                return now - timedelta(hours=hours)
 
             if '일 전' in date_str:
                 days = int(re.search(r'(\d+)', date_str).group(1))
-                return datetime.now() - timedelta(days=days)
+                return now - timedelta(days=days)
 
             # "2024.01.15." 형식
             match = re.search(r'(\d{4})\.(\d{2})\.(\d{2})', date_str)
             if match:
-                return datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+                return datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)), tzinfo=KST)
 
             return None
 

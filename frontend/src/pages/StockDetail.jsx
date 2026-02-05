@@ -154,7 +154,15 @@ function StockDetail() {
     const now = new Date()
     const diff = (now - date) / 1000
 
-    if (diff < 0) return '방금 전'
+    if (diff < 0) {
+      // 미래 시간 (예약 기사) - 실제 게시 시간 표시
+      return date.toLocaleString('ko-KR', {
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
     if (diff < 60) return '방금 전'
     if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
     if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`

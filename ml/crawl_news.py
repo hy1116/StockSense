@@ -23,7 +23,7 @@ import os
 import asyncio
 import argparse
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # 프로젝트 루트 설정
 project_root = Path(__file__).parent.parent
@@ -69,7 +69,8 @@ async def crawl_news_for_stocks(
     # 시간 필터 기준
     time_threshold = None
     if hours:
-        time_threshold = datetime.now() - timedelta(hours=hours)
+        KST = timezone(timedelta(hours=9))
+        time_threshold = datetime.now(KST) - timedelta(hours=hours)
 
     total_crawled = 0
     total_saved = 0
