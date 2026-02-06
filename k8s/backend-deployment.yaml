@@ -42,6 +42,18 @@ spec:
             secretKeyRef:
               name: stocksense-secret
               key: POSTGRES_PASSWORD
+        - name: REDIS_PASSWORD
+          value: ""
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: stocksense-secret
+              key: JWT_SECRET
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: stocksense-secret
+              key: ENCRYPTION_KEY
         volumeMounts:
         - name: models-storage
           mountPath: /app/models
