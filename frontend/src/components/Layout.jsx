@@ -41,6 +41,7 @@ function Layout() {
         <Outlet />
       </main>
       <footer className="footer">
+        <p className="deployed-by">Deployed by <strong>Hyunyoung</strong> : stable build v1.0</p>
         <p>&copy; 2026 StockSense. All rights reserved.</p>
       </footer>
     </div>
