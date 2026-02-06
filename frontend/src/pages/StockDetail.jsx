@@ -204,11 +204,11 @@ function StockDetail() {
   // 시가총액 포맷 (억 단위)
   const formatMarketCap = (cap) => {
     if (!cap) return '-'
-    if (cap >= 1000000000000) {
-      return `${(cap / 1000000000000).toFixed(1)}조`
-    }
     if (cap >= 100000000) {
-      return `${(cap / 100000000).toFixed(0)}억`
+      return `${(cap / 100000000).toFixed(1)}조`
+    }
+    if (cap >= 10000) {
+      return `${(cap / 10000).toFixed(0)}억`
     }
     return formatNumber(cap)
   }
@@ -476,7 +476,7 @@ function StockDetail() {
       <section className="sd-metrics">
         <div className="sd-metric-item">
           <span className="sd-metric-label">시가총액</span>
-          <span className="sd-metric-value">{formatMarketCap(basic_info.market_cap)}</span>
+          <span className="sd-metric-value">{formatMarketCap(basic_info.hts_avls)}</span>
         </div>
         <div className="sd-metric-divider" />
         <div className="sd-metric-item">
@@ -547,10 +547,10 @@ function StockDetail() {
             <span className="sd-info-key">거래량</span>
             <span className="sd-info-val">{formatNumber(basic_info.volume)}주</span>
           </div>
-          {basic_info.market_cap && (
+          {basic_info.hts_avls && (
             <div className="sd-info-row">
-              <span className="sd-info-key">시가총액</span>
-              <span className="sd-info-val">{formatMarketCap(basic_info.market_cap)}</span>
+              <span className="sd-info-key">HTS 시가총액</span>
+              <span className="sd-info-val">{formatMarketCap(basic_info.hts_avls)}</span>
             </div>
           )}
           {basic_info.per && (

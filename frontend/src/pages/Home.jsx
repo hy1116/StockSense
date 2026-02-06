@@ -59,12 +59,13 @@ function Home() {
   }
 
   const formatMarketCap = (num) => {
+    console.log(`num:${num}`)
     if (!num) return '-'
-    const eog = Math.floor(num / 100000000)
-    if (eog >= 10000) {
-      return `${(eog / 10000).toFixed(1)}조`
+    
+    if (num >= 10000) {
+      return `${(num / 10000).toFixed(1)}조`
     }
-    return `${formatNumber(eog)}억`
+    return `${formatNumber(num)}억`
   }
 
   const getPriceChangeClass = (change) => {

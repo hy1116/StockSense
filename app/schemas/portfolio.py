@@ -96,6 +96,7 @@ class StockBasicInfo(BaseModel):
     market_cap: Optional[int] = Field(None, description="시가총액")
     per: Optional[float] = Field(None, description="PER")
     pbr: Optional[float] = Field(None, description="PBR")
+    hts_avls: Optional[float] = Field(None, description="HTS 시가총액")
 
 
 class PredictionResult(BaseModel):

@@ -196,9 +196,6 @@ async def get_stock_detail(
         price_output = price_result.get("output", {})
         stock_name = price_output.get("hts_kor_isnm", "")
 
-        # 디버깅: 주식명 로그
-        logger.info(f"Stock detail for {stock_code}: stock_name='{stock_name}', price_output keys={list(price_output.keys())}")
-
         # 기본 정보 구성
         basic_info = StockBasicInfo(
             stock_code=stock_code,
@@ -210,9 +207,10 @@ async def get_stock_detail(
             volume=int(price_output.get("acml_vol", 0)),
             market_cap=int(price_output.get("stck_avls", 0)) if price_output.get("stck_avls") else None,
             per=float(price_output.get("per", 0)) if price_output.get("per") else None,
-            pbr=float(price_output.get("pbr", 0)) if price_output.get("pbr") else None
+            pbr=float(price_output.get("pbr", 0)) if price_output.get("pbr") else None,
+            hts_avls=float(price_output.get("hts_avls", 0)) if price_output.get("hts_avls") else None
         )
-
+        
         # 2. 차트 데이터 조회
         chart_result = client.get_daily_chart(stock_code, period=period, count=100)
         chart_data = []
