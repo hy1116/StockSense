@@ -12,9 +12,12 @@ from app.api import portfolio, prediction, auth, comment, ml_model, news
 from app.database import init_db, close_db
 from app.config import get_settings
 
+LOGGING_FORMAT = "%(asctime)s  %(levelname)5s %(process)d --- [%(threadName)15s] %(name)-40s : %(message)s"
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
+    format=LOGGING_FORMAT,
     format="%(message)s"
 )
 logger = logging.getLogger("api_logger")
