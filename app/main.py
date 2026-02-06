@@ -18,7 +18,7 @@ LOGGING_FORMAT = "%(asctime)s  %(levelname)5s %(process)d --- [%(threadName)15s]
 logging.basicConfig(
     level=logging.INFO,
     format=LOGGING_FORMAT,
-    format="%(message)s"
+    datefmt="%Y-%m-%d %H:%M:%S"
 )
 logger = logging.getLogger("api_logger")
 
