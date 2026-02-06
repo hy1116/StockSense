@@ -1,4 +1,6 @@
+import sys
 import time
+from loguru import logger
 from fastapi import FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.concurrency import iterate_in_threadpool
@@ -12,61 +14,49 @@ from app.api import portfolio, prediction, auth, comment, ml_model, news
 from app.database import init_db, close_db
 from app.config import get_settings
 
-LOGGING_FORMAT = "%(asctime)s  %(levelname)5s --- %(name)-40s : %(message)s"
-
-# 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format=LOGGING_FORMAT,
-    datefmt="%Y-%m-%d %H:%M:%S"
+logger.remove()
+logger.add(
+    sys.stdout, 
+    colorize=True, 
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{file}:{line}</cyan> - <level>{message}</level>",
+    filter=lambda record: "/health" not in record["message"] # /health 포함 로그 전역 필터링
 )
-logger = logging.getLogger("api_logger")
-
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        # WebSocket 요청은 로깅 미들웨어 스킵
-        if request.url.path.startswith("/api/portfolio/ws/"):
-            return await call_next(request)
-        if request.url.path == "/health":
+    async def dispatch(self, request: Request, call_next):
+        # WebSocket 및 Health 체크 스킵
+        if request.url.path.startswith("/api/portfolio/ws/") or request.url.path == "/health":
             return await call_next(request)
         
-        # 1. Request 정보 추출
         start_time = time.time()
-        url = request.url.path
-        method = request.method
-        headers = dict(request.headers)
-
-        # Request Body 처리 (Body를 읽으면 스트림이 소비되므로 복사본 생성 필요)
+        
+        # Request Body 처리 (주의: 큰 데이터의 경우 메모리 이슈가 있을 수 있음)
         body = await request.body()
         request_body = body.decode() if body else None
 
-        # 2. 다음 핸들러(API 로직) 실행
         response = await call_next(request)
 
-        # 3. Response 정보 추출
-        process_time = (time.time() - start_time) * 1000 # ms 단위
-        response_body = [section async for section in response.body_iterator]
-        response.body_iterator = iterate_in_threadpool(iter(response_body))
+        # Response Body 복구 및 추출
+        process_time = (time.time() - start_time) * 1000
+        response_body_bytes = [section async for section in response.body_iterator]
+        response.body_iterator = iterate_in_threadpool(iter(response_body_bytes))
 
         status_code = response.status_code
-
-        # 4. 로그 출력 (JSON 형태로 찍으면 Kibana에서 검색하기 매우 편함)
-        log_dict = {
-            "url": url,
-            "method": method,
-            "status_code": status_code,
-            "process_time_ms": f"{process_time:.2f}",
-            "request": {
-                "headers": headers,
-                "body": request_body
-            },
-            "response": {
-                "body": response_body[0].decode() if response_body else None
-            }
-        }
-
-        logger.info(log_dict)
+        
+        # 로그 데이터 구성
+        # .opt(depth=1)을 사용하면 미들웨어가 아닌 실제 호출 지점을 찍을 수도 있지만, 
+        # 여기서는 미들웨어 라인이 찍히는 것이 정상입니다.
+        logger.bind(
+            url=request.url.path,
+            method=request.method,
+            status_code=status_code
+        ).info(
+            f"Request: {request.method} {request.url.path} | "
+            f"Status: {status_code} | "
+            f"Time: {process_time:.2f}ms | "
+            f"ReqBody: {request_body} | "
+            f"ResBody: {response_body_bytes[0].decode() if response_body_bytes else None}"
+        )
 
         return response
 
