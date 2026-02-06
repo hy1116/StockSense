@@ -1,3 +1,7 @@
+/* ===================================================
+   Login / Register — 증권앱 스타일 (StockDetail 통일)
+   =================================================== */
+
 /* ===== Login Page Layout ===== */
 .login-page {
   min-height: 100vh;
@@ -5,17 +9,16 @@
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
-  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+  background: #0a0a0a;
 }
 
 .login-container {
   width: 100%;
-  max-width: 440px;
-  background: linear-gradient(145deg, #1e1e1e 0%, #1a1a1a 100%);
+  max-width: 420px;
+  background: rgba(255, 255, 255, 0.03);
   border-radius: 20px;
-  border: 1px solid #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   padding: 2.5rem;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
 /* ===== Header ===== */
@@ -25,18 +28,19 @@
 }
 
 .login-header h1 {
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
+  font-size: 2rem;
+  margin-bottom: 0.4rem;
   background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   font-weight: 700;
+  letter-spacing: -0.3px;
 }
 
 .login-header p {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.88rem;
 }
 
 /* ===== Form ===== */
@@ -44,7 +48,7 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .login-form .form-group {
@@ -55,8 +59,10 @@
 
 .login-form .form-group label {
   font-weight: 500;
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .input-wrapper {
@@ -67,24 +73,23 @@
 
 .login-form .form-group input {
   width: 100%;
-  padding: 0.875rem 1rem;
+  padding: 0.8rem 1rem;
   padding-right: 3rem;
-  border: 1px solid #333;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
-  background: #141414;
+  background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.87);
-  font-size: 0.95rem;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  font-size: 0.9rem;
+  transition: border-color 0.15s;
 }
 
 .login-form .form-group input:focus {
   outline: none;
-  border-color: #646cff;
-  box-shadow: 0 0 0 3px rgba(100, 108, 255, 0.15);
+  border-color: rgba(100, 108, 255, 0.5);
 }
 
 .login-form .form-group input::placeholder {
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.25);
 }
 
 .toggle-visibility {
@@ -93,80 +98,77 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 1.1rem;
+  font-size: 1rem;
   padding: 0.25rem;
-  opacity: 0.6;
-  transition: opacity 0.2s;
+  opacity: 0.4;
+  transition: opacity 0.15s;
 }
 
 .toggle-visibility:hover {
-  opacity: 1;
+  opacity: 0.7;
 }
 
 /* ===== Error Message ===== */
 .error-message {
-  padding: 0.875rem 1rem;
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  padding: 0.8rem 1rem;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
   border-radius: 10px;
   color: #f87171;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   text-align: center;
 }
 
 /* ===== Login Button ===== */
 .login-button {
   width: 100%;
-  padding: 1rem;
-  margin-top: 0.5rem;
-  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
+  padding: 0.85rem;
+  margin-top: 0.25rem;
+  background: #646cff;
   color: white;
   border: none;
   border-radius: 10px;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: opacity 0.15s;
 }
 
 .login-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(100, 108, 255, 0.4);
+  opacity: 0.85;
 }
 
 .login-button:disabled {
-  opacity: 0.6;
+  opacity: 0.4;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
 }
 
 /* ===== Info Section ===== */
 .login-info {
-  background: rgba(100, 108, 255, 0.08);
-  border-radius: 12px;
-  padding: 1.25rem;
-  margin-bottom: 1.5rem;
-  border-left: 3px solid #646cff;
+  background: rgba(100, 108, 255, 0.05);
+  border-radius: 10px;
+  padding: 1.1rem;
+  margin-bottom: 1.25rem;
+  border-left: 2px solid rgba(100, 108, 255, 0.3);
 }
 
 .login-info h3 {
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-  margin-bottom: 0.75rem;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 0.6rem;
 }
 
 .login-info ol {
   margin: 0;
   padding-left: 1.25rem;
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.5);
   line-height: 1.8;
 }
 
 .login-info a {
-  color: #646cff;
+  color: #818cf8;
   text-decoration: none;
   font-weight: 500;
 }
@@ -181,9 +183,9 @@
 }
 
 .login-notice p {
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.4);
-  margin: 0.25rem 0;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.3);
+  margin: 0.2rem 0;
 }
 
 /* ===== Step Indicator (Register) ===== */
@@ -201,8 +203,8 @@
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  opacity: 0.5;
-  transition: opacity 0.3s;
+  opacity: 0.4;
+  transition: opacity 0.2s;
 }
 
 .step.active {
@@ -210,38 +212,38 @@
 }
 
 .step-number {
-  width: 2rem;
-  height: 2rem;
+  width: 1.85rem;
+  height: 1.85rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #333;
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 50%;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  transition: background 0.3s, color 0.3s;
+  transition: background 0.2s, color 0.2s;
 }
 
 .step.active .step-number {
-  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
+  background: #646cff;
   color: white;
 }
 
 .step-label {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.45);
   white-space: nowrap;
 }
 
 .step.active .step-label {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .step-line {
   flex: 1;
   max-width: 60px;
-  height: 2px;
-  background: #333;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
   margin-bottom: 1.5rem;
 }
 
@@ -256,40 +258,40 @@
 }
 
 .check-button {
-  padding: 0.875rem 1rem;
-  background: #333;
-  color: rgba(255, 255, 255, 0.8);
-  border: 1px solid #444;
+  padding: 0.8rem 0.85rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.2s, border-color 0.2s;
+  transition: all 0.15s;
 }
 
 .check-button:hover:not(:disabled) {
-  background: #444;
-  border-color: #555;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .check-button:disabled {
-  opacity: 0.5;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 /* ===== Success Text ===== */
 .success-text {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: #4ade80;
-  margin-top: 0.25rem;
+  margin-top: 0.2rem;
 }
 
 /* ===== Button Group ===== */
 .button-group {
   display: flex;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
 }
 
 .button-group .login-button {
@@ -298,45 +300,45 @@
 }
 
 .back-button {
-  padding: 1rem 1.5rem;
-  background: #333;
-  color: rgba(255, 255, 255, 0.8);
-  border: 1px solid #444;
+  padding: 0.85rem 1.25rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
+  transition: all 0.15s;
 }
 
 .back-button:hover:not(:disabled) {
-  background: #444;
-  border-color: #555;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .back-button:disabled {
-  opacity: 0.5;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 /* ===== Login Footer (Register Link) ===== */
 .login-footer {
   text-align: center;
-  margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #2a2a2a;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .login-footer p {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.4);
   margin: 0;
 }
 
 .login-footer a {
-  color: #646cff;
+  color: #818cf8;
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
   margin-left: 0.25rem;
 }
 
@@ -356,11 +358,11 @@
   }
 
   .login-header h1 {
-    font-size: 2rem;
+    font-size: 1.75rem;
   }
 
   .login-form .form-group input {
-    padding: 0.75rem 0.875rem;
+    padding: 0.7rem 0.875rem;
     padding-right: 2.75rem;
   }
 }
@@ -368,93 +370,104 @@
 /* ===== Light Mode Support ===== */
 @media (prefers-color-scheme: light) {
   .login-page {
-    background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 50%, #d0d0d0 100%);
+    background: #f3f4f6;
   }
 
   .login-container {
-    background: #ffffff;
-    border-color: #e0e0e0;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+    background: #fff;
+    border-color: #e5e7eb;
   }
 
   .login-header p {
-    color: rgba(33, 53, 71, 0.6);
+    color: rgba(17, 24, 39, 0.45);
   }
 
   .login-form .form-group label {
-    color: rgba(33, 53, 71, 0.8);
+    color: rgba(17, 24, 39, 0.5);
   }
 
   .login-form .form-group input {
-    background: #f8f9fa;
-    border-color: #e0e0e0;
-    color: #213547;
+    background: #f9fafb;
+    border-color: #e5e7eb;
+    color: #111827;
+  }
+
+  .login-form .form-group input:focus {
+    border-color: #4f46e5;
   }
 
   .login-form .form-group input::placeholder {
-    color: rgba(33, 53, 71, 0.4);
+    color: rgba(17, 24, 39, 0.3);
+  }
+
+  .error-message {
+    background: rgba(239, 68, 68, 0.05);
+    border-color: rgba(239, 68, 68, 0.12);
   }
 
   .login-info {
-    background: rgba(100, 108, 255, 0.05);
+    background: rgba(100, 108, 255, 0.04);
+    border-left-color: rgba(79, 70, 229, 0.2);
   }
 
   .login-info h3 {
-    color: #213547;
+    color: #111827;
   }
 
   .login-info ol {
-    color: rgba(33, 53, 71, 0.7);
+    color: rgba(17, 24, 39, 0.55);
   }
 
   .login-notice p {
-    color: rgba(33, 53, 71, 0.5);
+    color: rgba(17, 24, 39, 0.35);
   }
 
   .step-number {
-    background: #e0e0e0;
-    color: #213547;
+    background: #e5e7eb;
+    color: #111827;
   }
 
   .step-label {
-    color: rgba(33, 53, 71, 0.6);
+    color: rgba(17, 24, 39, 0.45);
   }
 
   .step.active .step-label {
-    color: #213547;
+    color: #111827;
   }
 
   .step-line {
-    background: #e0e0e0;
+    background: #e5e7eb;
   }
 
   .check-button {
-    background: #f0f0f0;
-    color: #213547;
-    border-color: #e0e0e0;
+    background: #f3f4f6;
+    color: rgba(17, 24, 39, 0.6);
+    border-color: #e5e7eb;
   }
 
   .check-button:hover:not(:disabled) {
-    background: #e0e0e0;
-    border-color: #d0d0d0;
+    background: #e5e7eb;
   }
 
   .back-button {
-    background: #f0f0f0;
-    color: #213547;
-    border-color: #e0e0e0;
+    background: #f3f4f6;
+    color: rgba(17, 24, 39, 0.6);
+    border-color: #e5e7eb;
   }
 
   .back-button:hover:not(:disabled) {
-    background: #e0e0e0;
-    border-color: #d0d0d0;
+    background: #e5e7eb;
   }
 
   .login-footer {
-    border-top-color: #e0e0e0;
+    border-top-color: #e5e7eb;
   }
 
   .login-footer p {
-    color: rgba(33, 53, 71, 0.6);
+    color: rgba(17, 24, 39, 0.45);
+  }
+
+  .login-footer a {
+    color: #4f46e5;
   }
 }

@@ -1,44 +1,38 @@
+/* ===================================================
+   Prediction — 증권앱 스타일 (StockDetail 통일)
+   =================================================== */
+
 /* ===== Base Layout ===== */
 .prediction {
-  padding: 1.5rem 0;
-  max-width: 1200px;
+  max-width: 960px;
   margin: 0 auto;
+  padding: 0 1rem 3rem;
 }
 
-/* ===== Hero Section ===== */
+/* ===== Title ===== */
 .prediction h1 {
-  text-align: center;
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
-  padding: 2rem 1rem 1rem;
-  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: 1.5rem;
   font-weight: 700;
-}
-
-.prediction-subtitle {
-  text-align: center;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 1rem;
-  margin-bottom: 2rem;
+  color: #fff;
+  letter-spacing: -0.3px;
+  padding: 1.75rem 0 1.25rem;
+  margin: 0;
 }
 
 /* ===== Card Styles ===== */
 .prediction .card {
-  margin: 0 1rem 1.5rem;
-  background: linear-gradient(145deg, #1e1e1e 0%, #1a1a1a 100%);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
-  border: 1px solid #2a2a2a;
   padding: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .prediction .card h2 {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-  margin-bottom: 1.25rem;
+  color: rgba(255, 255, 255, 0.88);
+  margin: 0 0 1.25rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -46,10 +40,11 @@
 
 .prediction .card h2::before {
   content: '';
-  width: 4px;
-  height: 1.1rem;
-  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
+  width: 3px;
+  height: 1rem;
+  background: #646cff;
   border-radius: 2px;
+  flex-shrink: 0;
 }
 
 /* ===== Form Styles ===== */
@@ -68,34 +63,32 @@
 
 .form-group label {
   font-weight: 500;
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .search-input-wrapper {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  background: #141414;
-  border: 1px solid #333;
-  border-radius: 12px;
   padding: 0.25rem 0.25rem 0.25rem 1rem;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.15s;
 }
 
 .search-input-wrapper:focus-within {
-  border-color: #646cff;
-  box-shadow: 0 0 0 3px rgba(100, 108, 255, 0.15);
+  border-color: rgba(100, 108, 255, 0.5);
 }
 
 .form-group input {
   flex: 1;
   min-width: 0;
-  padding: 0.75rem 0;
+  padding: 0.7rem 0;
   border: none;
   background: transparent;
   color: rgba(255, 255, 255, 0.87);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
 .form-group input:focus {
@@ -103,44 +96,41 @@
 }
 
 .form-group input::placeholder {
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.25);
 }
 
 .form-group input:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .selected-stock-name {
-  color: #646cff;
-  font-size: 0.85rem;
-  font-weight: 500;
+  color: #818cf8;
+  font-size: 0.82rem;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .predict-button {
-  padding: 0.75rem 1.5rem;
-  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
+  padding: 0.65rem 1.25rem;
+  background: #646cff;
   color: white;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 0.9rem;
-  transition: transform 0.2s, box-shadow 0.2s;
+  font-size: 0.85rem;
+  transition: opacity 0.15s;
   white-space: nowrap;
 }
 
 .predict-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(100, 108, 255, 0.35);
+  opacity: 0.85;
 }
 
 .predict-button:disabled {
-  opacity: 0.6;
+  opacity: 0.4;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
 }
 
 /* ===== Search Dropdown ===== */
@@ -150,23 +140,23 @@
   left: 0;
   right: 0;
   background: #1a1a1a;
-  border: 1px solid #333;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  margin-top: 0.5rem;
+  margin-top: 0.4rem;
   max-height: 300px;
   overflow-y: auto;
   z-index: 100;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 .prediction .search-dropdown-item {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.875rem 1rem;
+  padding: 0.8rem 1rem;
   cursor: pointer;
-  border-bottom: 1px solid #2a2a2a;
-  transition: background-color 0.15s;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.15s;
 }
 
 .prediction .search-dropdown-item:last-child {
@@ -175,157 +165,140 @@
 
 .prediction .search-dropdown-item:hover,
 .prediction .search-dropdown-item.selected {
-  background: rgba(100, 108, 255, 0.15);
+  background: rgba(100, 108, 255, 0.1);
 }
 
 .prediction .dropdown-name {
   flex: 1;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .prediction .dropdown-code {
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.5);
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: monospace;
 }
 
 .prediction .dropdown-market {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.5rem;
-  background: rgba(100, 108, 255, 0.2);
-  color: #646cff;
+  font-size: 0.68rem;
+  padding: 0.15rem 0.45rem;
+  background: rgba(100, 108, 255, 0.15);
+  color: #818cf8;
   border-radius: 4px;
+  font-weight: 600;
 }
 
 /* ===== Error Message ===== */
 .error-message {
-  margin-top: 1rem;
-  padding: 1rem;
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
   border-radius: 10px;
   color: #f87171;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 
 /* ===== Prediction Result ===== */
 .prediction-result {
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .stock-info {
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #333;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .stock-info h3 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #646cff 0%, #535bf2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #fff;
 }
 
 .prediction-details {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .detail-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.25rem;
-  background: rgba(100, 108, 255, 0.05);
-  border-radius: 12px;
-  border: 1px solid #333;
-  transition: transform 0.2s, border-color 0.2s;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.detail-row:hover {
-  transform: translateX(4px);
-  border-color: #404040;
+.detail-row:last-child {
+  border-bottom: none;
 }
 
 .detail-row .label {
-  font-weight: 500;
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
+  font-weight: 400;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .detail-row .value {
   font-weight: 600;
-  font-size: 1rem;
-  color: rgba(255, 255, 255, 0.95);
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .detail-row .value.price-highlight {
-  font-size: 1.25rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #ffd700 0%, #ffb800 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fbbf24;
 }
 
 .detail-row .value.positive {
-  color: #4ade80;
+  color: #ef4444;
 }
 
 .detail-row .value.negative {
-  color: #f87171;
+  color: #3b82f6;
 }
 
 .detail-row .value.recommendation {
-  font-size: 1rem;
-  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+  padding: 0.3rem 0.7rem;
   border-radius: 6px;
-  background: rgba(100, 108, 255, 0.2);
+  font-weight: 600;
 }
 
 /* ===== Empty State ===== */
 .prediction .card p {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.88rem;
 }
 
-/* ===== Responsive Design ===== */
+/* ===== Responsive — Tablet ===== */
 @media (max-width: 768px) {
   .prediction h1 {
-    font-size: 2rem;
-    padding: 1.5rem 1rem 0.75rem;
+    font-size: 1.3rem;
   }
 
   .prediction .card {
-    margin: 0 0.75rem 1.25rem;
     padding: 1.25rem;
-  }
-
-  .detail-row {
-    padding: 0.875rem 1rem;
-  }
-
-  .detail-row .value.price-highlight {
-    font-size: 1.1rem;
   }
 }
 
+/* ===== Responsive — Mobile ===== */
 @media (max-width: 480px) {
   .prediction {
-    padding: 1rem 0;
+    padding: 0 0.5rem 2rem;
   }
 
   .prediction h1 {
-    font-size: 1.75rem;
+    font-size: 1.2rem;
+    padding: 1.25rem 0 0.75rem;
   }
 
   .prediction .card {
-    margin: 0 0.5rem 1rem;
     padding: 1rem;
   }
 
@@ -337,12 +310,12 @@
 
   .form-group input {
     width: 100%;
-    padding: 0.75rem;
+    padding: 0.7rem;
   }
 
   .predict-button {
     width: 100%;
-    padding: 0.875rem;
+    padding: 0.75rem;
   }
 
   .selected-stock-name {
@@ -352,104 +325,115 @@
   .detail-row {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.5rem;
-  }
-
-  .detail-row:hover {
-    transform: none;
+    gap: 0.3rem;
   }
 
   .stock-info h3 {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
   }
 }
 
 /* ===== Light Mode Support ===== */
 @media (prefers-color-scheme: light) {
+  .prediction h1 {
+    color: #111827;
+  }
+
   .prediction .card {
-    background: #f8f9fa;
-    border-color: #e0e0e0;
+    background: #fff;
+    border-color: #e5e7eb;
   }
 
   .prediction .card h2 {
-    color: #213547;
-  }
-
-  .prediction-subtitle {
-    color: rgba(33, 53, 71, 0.6);
+    color: #111827;
   }
 
   .form-group label {
-    color: rgba(33, 53, 71, 0.8);
+    color: rgba(17, 24, 39, 0.5);
   }
 
   .search-input-wrapper {
-    background: #ffffff;
-    border-color: #e0e0e0;
+    background: #f9fafb;
+    border-color: #e5e7eb;
+  }
+
+  .search-input-wrapper:focus-within {
+    border-color: #4f46e5;
   }
 
   .form-group input {
-    color: #213547;
+    color: #111827;
   }
 
   .form-group input::placeholder {
-    color: rgba(33, 53, 71, 0.4);
+    color: rgba(17, 24, 39, 0.3);
   }
 
   .selected-stock-name {
-    color: #535bf2;
+    color: #4f46e5;
   }
 
   .prediction .search-dropdown {
     background: #ffffff;
-    border-color: #e0e0e0;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    border-color: #e5e7eb;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   }
 
   .prediction .search-dropdown-item {
-    border-color: #eee;
+    border-color: #f3f4f6;
   }
 
   .prediction .search-dropdown-item:hover,
   .prediction .search-dropdown-item.selected {
-    background: rgba(100, 108, 255, 0.1);
+    background: rgba(100, 108, 255, 0.08);
   }
 
   .prediction .dropdown-name {
-    color: #213547;
+    color: #111827;
   }
 
   .prediction .dropdown-code {
-    color: rgba(33, 53, 71, 0.5);
+    color: rgba(17, 24, 39, 0.4);
   }
 
   .stock-info {
-    border-bottom-color: #e0e0e0;
+    border-bottom-color: #e5e7eb;
+  }
+
+  .stock-info h3 {
+    color: #111827;
   }
 
   .detail-row {
-    background: rgba(100, 108, 255, 0.05);
-    border-color: #e0e0e0;
-  }
-
-  .detail-row:hover {
-    border-color: #ccc;
+    border-bottom-color: #f3f4f6;
   }
 
   .detail-row .label {
-    color: rgba(33, 53, 71, 0.6);
+    color: rgba(17, 24, 39, 0.5);
   }
 
   .detail-row .value {
-    color: #213547;
+    color: #111827;
+  }
+
+  .detail-row .value.price-highlight {
+    color: #d97706;
+  }
+
+  .detail-row .value.positive {
+    color: #dc2626;
+  }
+
+  .detail-row .value.negative {
+    color: #2563eb;
   }
 
   .prediction .card p {
-    color: rgba(33, 53, 71, 0.5);
+    color: rgba(17, 24, 39, 0.35);
   }
 
   .error-message {
-    background: rgba(248, 113, 113, 0.08);
-    border-color: rgba(248, 113, 113, 0.2);
+    background: rgba(239, 68, 68, 0.05);
+    border-color: rgba(239, 68, 68, 0.12);
   }
 }

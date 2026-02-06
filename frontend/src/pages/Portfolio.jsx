@@ -93,7 +93,7 @@ function Portfolio() {
 
   return (
     <div className="portfolio">
-      <h1>Portfolio</h1>
+      <h1>포트폴리오</h1>
 
       <section className="portfolio-summary card">
         <h2>계좌 요약</h2>

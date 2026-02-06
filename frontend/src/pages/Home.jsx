@@ -147,7 +147,7 @@ function Home() {
     <div className="home">
       <section className="hero">
         <h1>StockSense</h1>
-        <p>AI 기반 주식 예측 및 분석 시스템</p>
+        <p>AI 기반 주식 예측 · 분석</p>
         {!isLoading && health && (
           <span className="status-badge">서버 정상</span>
         )}
