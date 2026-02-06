@@ -9,10 +9,10 @@
   padding: 0 1rem 3rem;
 }
 
-/* ===== Hero Section ===== */
+/* ===== Hero Section (비로그인) ===== */
 .hero {
   text-align: center;
-  padding: 2rem 1rem 1.5rem;
+  padding: 2.5rem 1rem 1.5rem;
 }
 
 .hero h1 {
@@ -44,10 +44,122 @@
   border: 1px solid rgba(74, 222, 128, 0.15);
 }
 
+/* ===== Asset Hero (로그인 — 토스 스타일) ===== */
+.asset-hero {
+  padding: 2rem 0.25rem 1rem;
+}
+
+.asset-hero-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.asset-hero-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.asset-hero-price {
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -1px;
+  line-height: 1.15;
+}
+
+.asset-hero-unit {
+  font-size: 1.5rem;
+  font-weight: 600;
+  opacity: 0.8;
+  margin-left: 1px;
+}
+
+.asset-hero-change {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+
+.asset-hero-sub {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 400;
+  margin-top: 0.35rem;
+}
+
+.asset-hero-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.85rem;
+  padding: 0.4rem 0.85rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.asset-hero-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.asset-arrow {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.35);
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.asset-arrow.expanded {
+  transform: rotate(180deg);
+}
+
+/* Detail rows — toggled */
+.asset-detail {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+}
+
+.asset-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.asset-detail-row:last-child {
+  border-bottom: none;
+}
+
+.asset-detail-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 400;
+}
+
+.asset-detail-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
 /* ===== Search Section ===== */
 .search-section {
-  max-width: 520px;
-  margin: 0 auto 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .search-container {
@@ -56,43 +168,40 @@
 
 .search-form {
   display: flex;
-  gap: 0.5rem;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 0 1rem;
+  transition: border-color 0.15s;
+}
+
+.search-form:focus-within {
+  border-color: rgba(100, 108, 255, 0.4);
+}
+
+.search-icon {
+  font-size: 0.9rem;
+  opacity: 0.35;
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 .search-input {
   flex: 1;
-  padding: 0.8rem 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  padding: 0.75rem 0.6rem;
+  border: none;
+  background: transparent;
   color: rgba(255, 255, 255, 0.87);
-  font-size: 0.9rem;
-  transition: border-color 0.15s;
+  font-size: 0.88rem;
 }
 
 .search-input:focus {
   outline: none;
-  border-color: rgba(100, 108, 255, 0.5);
 }
 
 .search-input::placeholder {
   color: rgba(255, 255, 255, 0.25);
-}
-
-.search-button {
-  padding: 0.8rem 1.25rem;
-  background: #646cff;
-  color: white;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.85rem;
-  transition: opacity 0.15s;
-}
-
-.search-button:hover {
-  opacity: 0.85;
 }
 
 /* Search Dropdown */
@@ -153,74 +262,9 @@
   letter-spacing: 0.3px;
 }
 
-/* ===== Portfolio Summary ===== */
-.portfolio-summary {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
-  padding: 1.5rem;
-  margin-bottom: 1rem;
-}
-
-.portfolio-summary h2 {
-  margin: 0 0 1.25rem;
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.88);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.portfolio-summary h2::before {
-  content: '';
-  width: 3px;
-  height: 1rem;
-  background: #646cff;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.portfolio-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
-}
-
-.portfolio-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.85rem 0.5rem;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.portfolio-label {
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 0.72rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.portfolio-value {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.portfolio-rate {
-  font-size: 0.8rem;
-  margin-left: 0.3rem;
-  font-weight: 500;
-}
-
 /* ===== Ranking Section (Tabs + List) ===== */
 .ranking-section {
-  margin-top: 1rem;
+  margin-top: 0.5rem;
 }
 
 .ranking-header {
@@ -456,6 +500,10 @@
     font-size: 1.75rem;
   }
 
+  .asset-hero-price {
+    font-size: 2rem;
+  }
+
   .stock-list-header,
   .stock-list-item {
     grid-template-columns: 50px 1fr 90px 80px;
@@ -482,10 +530,6 @@
   .stock-name {
     font-size: 0.85rem;
   }
-
-  .portfolio-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 /* ===== Responsive — Mobile ===== */
@@ -495,19 +539,27 @@
   }
 
   .hero {
-    padding: 1.25rem 1rem 1rem;
+    padding: 1.5rem 1rem 1rem;
   }
 
   .hero h1 {
     font-size: 1.5rem;
   }
 
-  .search-form {
-    flex-direction: column;
+  .asset-hero {
+    padding: 1.5rem 0.25rem 0.75rem;
   }
 
-  .search-button {
-    width: 100%;
+  .asset-hero-price {
+    font-size: 1.75rem;
+  }
+
+  .asset-hero-unit {
+    font-size: 1.15rem;
+  }
+
+  .asset-hero-change {
+    font-size: 0.88rem;
   }
 
   .stock-list-header,
@@ -535,18 +587,6 @@
     display: none;
   }
 
-  .portfolio-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .portfolio-card {
-    padding: 0.65rem 0.35rem;
-  }
-
-  .portfolio-value {
-    font-size: 0.95rem;
-  }
-
   .tab-buttons {
     width: 100%;
   }
@@ -565,9 +605,16 @@
 
 /* ===== Light Mode Support ===== */
 @media (prefers-color-scheme: light) {
-  .search-input {
-    background: #f9fafb;
+  .search-form {
+    background: #f3f4f6;
     border-color: #e5e7eb;
+  }
+
+  .search-form:focus-within {
+    border-color: #4f46e5;
+  }
+
+  .search-input {
     color: #111827;
   }
 
@@ -575,31 +622,65 @@
     color: rgba(17, 24, 39, 0.3);
   }
 
-  .search-input:focus {
-    border-color: #4f46e5;
-  }
-
-  .portfolio-summary,
-  .stock-list {
-    background: #fff;
-    border-color: #e5e7eb;
-  }
-
-  .portfolio-summary h2 {
+  .asset-hero-price {
     color: #111827;
   }
 
-  .portfolio-card {
+  .asset-hero-unit {
+    color: #111827;
+  }
+
+  .asset-hero-change.price-up {
+    color: #dc2626;
+  }
+
+  .asset-hero-change.price-down {
+    color: #2563eb;
+  }
+
+  .asset-hero-label {
+    color: rgba(17, 24, 39, 0.45);
+  }
+
+  .asset-hero-sub {
+    color: rgba(17, 24, 39, 0.4);
+  }
+
+  .asset-hero-toggle {
+    background: #f3f4f6;
+    border-color: #e5e7eb;
+    color: rgba(17, 24, 39, 0.5);
+  }
+
+  .asset-hero-toggle:hover {
+    background: #e5e7eb;
+    color: rgba(17, 24, 39, 0.7);
+  }
+
+  .asset-arrow {
+    color: rgba(17, 24, 39, 0.35);
+  }
+
+  .asset-detail {
     background: #f9fafb;
     border-color: #e5e7eb;
   }
 
-  .portfolio-label {
+  .asset-detail-row {
+    border-bottom-color: #e5e7eb;
+  }
+
+  .asset-detail-label {
     color: rgba(17, 24, 39, 0.45);
   }
 
-  .portfolio-value {
+  .asset-detail-value {
     color: #111827;
+  }
+
+  .stock-list {
+    background: #fff;
+    border-color: #e5e7eb;
   }
 
   .stock-list-header {

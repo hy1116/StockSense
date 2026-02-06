@@ -13,11 +13,12 @@ function Home() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [assetExpanded, setAssetExpanded] = useState(false);
   const searchRef = useRef(null);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const activeTab = searchParams.get('tab') || 'marketCap';
+  const activeTab = searchParams.get('tab') || (isLoggedIn ? 'holdings' : 'marketCap');
 
   const handleTabChange = (tabName) => {
     // 뒤로가기를 지원하려면 replace: false (기본값)로 두세요.
@@ -145,29 +146,74 @@ function Home() {
 
   return (
     <div className="home">
-      <section className="hero">
-        <h1>StockSense</h1>
-        <p>AI 기반 주식 예측 · 분석</p>
-        {!isLoading && health && (
-          <span className="status-badge">서버 정상</span>
-        )}
-      </section>
+      {/* 자산 Hero — 로그인 시 자산 메인, 비로그인 시 브랜드 표시 */}
+      {isLoggedIn && portfolio ? (
+        <section className="asset-hero">
+          <div className="asset-hero-main">
+            <span className="asset-hero-label">보유주식</span>
+            <span className="asset-hero-price">
+              {formatNumber(portfolio.total_asset)}<span className="asset-hero-unit">원</span>
+            </span>
+            <div className={`asset-hero-change ${getPriceChangeClass(portfolio.total_profit_rate)}`}>
+              {portfolio.total_profit_rate > 0 ? '+' : ''}{portfolio.total_profit_rate.toFixed(2)}%
+              {' '}({portfolio.total_profit_loss > 0 ? '+' : ''}{formatNumber(portfolio.total_profit_loss)}원)
+            </div>
+            <span className="asset-hero-sub">총 투자금 {formatNumber(portfolio.total_asset - portfolio.total_profit_loss)}원</span>
+          </div>
+          <button
+            className="asset-hero-toggle"
+            onClick={() => setAssetExpanded(!assetExpanded)}
+          >
+            {assetExpanded ? '접기' : '상세'}
+            <span className={`asset-arrow ${assetExpanded ? 'expanded' : ''}`}>&#9662;</span>
+          </button>
+          {assetExpanded && (
+            <div className="asset-detail">
+              <div className="asset-detail-row">
+                <span className="asset-detail-label">보유 현금</span>
+                <span className="asset-detail-value">{formatNumber(portfolio.cash)}원</span>
+              </div>
+              <div className="asset-detail-row">
+                <span className="asset-detail-label">주식 평가액</span>
+                <span className="asset-detail-value">{formatNumber(portfolio.stock_eval_amount)}원</span>
+              </div>
+              <div className="asset-detail-row">
+                <span className="asset-detail-label">평가 손익</span>
+                <span className={`asset-detail-value ${getPriceChangeClass(portfolio.total_profit_rate)}`}>
+                  {portfolio.total_profit_loss > 0 ? '+' : ''}{formatNumber(portfolio.total_profit_loss)}원
+                </span>
+              </div>
+            </div>
+          )}
+        </section>
+      ) : isLoggedIn && isLoadingPortfolio ? (
+        <section className="asset-hero">
+          <div className="loading">자산 정보를 불러오는 중...</div>
+        </section>
+      ) : (
+        <section className="hero">
+          <h1>StockSense</h1>
+          <p>AI 기반 주식 예측 · 분석</p>
+          {!isLoading && health && (
+            <span className="status-badge">서버 정상</span>
+          )}
+        </section>
+      )}
 
+      {/* 검색 바 */}
       <section className="search-section">
         <div className="search-container" ref={searchRef}>
           <form onSubmit={handleSearch} className="search-form">
+            <span className="search-icon">&#128269;</span>
             <input
               type="text"
-              placeholder="종목명 또는 코드 검색 (예: 삼성전자, 005930)"
+              placeholder="종목명 또는 코드 검색"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
               onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
               className="search-input"
             />
-            <button type="submit" className="search-button">
-              {isSearching ? '...' : '검색'}
-            </button>
           </form>
           {showDropdown && searchResults.length > 0 && (
             <div className="search-dropdown">
@@ -188,46 +234,18 @@ function Home() {
         </div>
       </section>
 
-      {/* 내 자산 섹션 - 로그인 상태에서만 표시 */}
-      {isLoggedIn && (
-        <section className="portfolio-summary">
-          <h2>내 자산</h2>
-          {isLoadingPortfolio ? (
-            <div className="loading">자산 정보를 불러오는 중...</div>
-          ) : portfolio ? (
-            <div className="portfolio-cards">
-              <div className="portfolio-card">
-                <div className="portfolio-label">총 자산</div>
-                <div className="portfolio-value">{formatNumber(portfolio.total_asset)}원</div>
-              </div>
-              <div className="portfolio-card">
-                <div className="portfolio-label">보유 현금</div>
-                <div className="portfolio-value">{formatNumber(portfolio.cash)}원</div>
-              </div>
-              <div className="portfolio-card">
-                <div className="portfolio-label">주식 평가액</div>
-                <div className="portfolio-value">{formatNumber(portfolio.stock_eval_amount)}원</div>
-              </div>
-              <div className="portfolio-card">
-                <div className="portfolio-label">평가 손익</div>
-                <div className={`portfolio-value ${getPriceChangeClass(portfolio.total_profit_rate)}`}>
-                  {formatNumber(portfolio.total_profit_loss)}원
-                  <span className="portfolio-rate">
-                    ({portfolio.total_profit_rate > 0 ? '+' : ''}{portfolio.total_profit_rate.toFixed(2)}%)
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="error">자산 정보를 불러올 수 없습니다</div>
-          )}
-        </section>
-      )}
-
       {/* 상위 종목 섹션 - 탭 형태 */}
       <section className="ranking-section">
         <div className="ranking-header">
           <div className="tab-buttons">
+            {isLoggedIn && (
+              <button
+                className={`tab-button ${activeTab === 'holdings' ? 'active' : ''}`}
+                onClick={() => handleTabChange('holdings')}
+              >
+                보유 종목
+              </button>
+            )}
             <button
               className={`tab-button ${activeTab === 'marketCap' ? 'active' : ''}`}
               onClick={() => handleTabChange('marketCap')}
@@ -240,14 +258,6 @@ function Home() {
             >
               거래량 상위
             </button>
-            {isLoggedIn && (
-              <button
-                className={`tab-button ${activeTab === 'holdings' ? 'active' : ''}`}
-                onClick={() => handleTabChange('holdings')}
-              >
-                보유 종목
-              </button>
-            )}
           </div>
         </div>
 
