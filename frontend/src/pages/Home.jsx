@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { getHealthCheck, getTopStocks, getMarketCapStocks, getPortfolio, searchStocks } from '../services/api'
+import { getHealthCheck, getTopStocks, getMarketCapStocks, getFluctuationStocks, getPortfolio, searchStocks } from '../services/api'
 import useBalanceWebSocket from '../hooks/useBalanceWebSocket'
 import './Home.css'
 
@@ -39,6 +39,12 @@ function Home() {
   const { data: marketCapData, isLoading: isLoadingMarketCap } = useQuery({
     queryKey: ['marketCapStocks'],
     queryFn: () => getMarketCapStocks(20),
+    refetchInterval: 60000,
+  })
+  
+  const { data: fluctuationStocksData, isLoading: isLoadingFluctuation } = useQuery({
+    queryKey: ['fluctuationStocks'],
+    queryFn: () => getFluctuationStocks(20),
     refetchInterval: 60000,
   })
 
@@ -141,8 +147,22 @@ function Home() {
     setSearchTerm('')
   }
 
-  const currentStocks = activeTab === 'volume' ? topStocksData?.stocks : marketCapData?.stocks
-  const isLoadingCurrentStocks = activeTab === 'volume' ? isLoadingStocks : isLoadingMarketCap
+  // 1. 데이터와 로딩 상태를 객체에 담기
+  const stockDataMap = {
+    volume: topStocksData?.stocks,
+    marketCap: marketCapData?.stocks,
+    fluctuation: fluctuationStocksData?.stocks, // 새로 추가된 등락률 데이터
+  };
+
+  const loadingStateMap = {
+    volume: isLoadingStocks,
+    marketCap: isLoadingMarketCap,
+    fluctuation: isLoadingFluctuation, // 새로 추가된 등락률 로딩 상태
+  };
+
+  // 2. 현재 활성화된 탭에 맞는 값 추출
+  const currentStocks = stockDataMap[activeTab] || [];
+  const isLoadingCurrentStocks = loadingStateMap[activeTab];
 
   return (
     <div className="home">
@@ -258,6 +278,12 @@ function Home() {
             >
               거래량 상위
             </button>
+            <button
+              className={`tab-button ${activeTab === 'fluctuation' ? 'active' : ''}`}
+              onClick={() => handleTabChange('fluctuation')}
+            >
+              등락률 상위
+            </button>
           </div>
         </div>
 
@@ -294,6 +320,43 @@ function Home() {
                   {activeTab === 'marketCap' && (
                     <span className="col-marketcap">{formatMarketCap(stock.market_cap)}</span>
                   )}
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="error">종목 정보를 불러올 수 없습니다</div>
+          )
+        )}
+
+        {/* 등락률 상위 탭 */}
+        {activeTab === 'fluctuation' && (
+          isLoadingCurrentStocks ? (
+            <div className="loading">종목 정보를 불러오는 중...</div>
+          ) : currentStocks ? (
+            <div className="stock-list">
+              <div className="stock-list-header">
+                <span className="col-rank">순위</span>
+                <span className="col-name">종목명</span>
+                <span className="col-price">현재가</span>
+                <span className="col-change">등락률</span>
+              </div>
+              {currentStocks.map((stock) => (
+                <Link
+                  key={stock.stock_code}
+                  to={`/stock/${stock.stock_code}`}
+                  className="stock-list-item"
+                >
+                  <span className="col-rank">
+                    <span className="rank-badge">{stock.rank}</span>
+                  </span>
+                  <span className="col-name">
+                    <span className="stock-name">{stock.stock_name}</span>
+                    <span className="stock-code">{stock.stock_code}</span>
+                  </span>
+                  <span className="col-price">{formatNumber(stock.current_price)}원</span>
+                  <span className={`col-change ${getPriceChangeClass(stock.change_rate)}`}>
+                    {stock.change_rate > 0 ? '+' : ''}{stock.change_rate.toFixed(2)}%
+                  </span>
                 </Link>
               ))}
             </div>

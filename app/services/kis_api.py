@@ -367,6 +367,50 @@ class KISAPIClient:
             return result
         else:
             raise Exception(f"시가총액 순위 조회 실패: {response.text}")
+    
+    def get_fluctuation_ranking(self, top_n: int = 30) -> Dict:
+        """등락률 순위 조회
+
+        Args:
+            top_n: 조회할 상위 종목 수 (기본 30개)
+
+        Returns:
+            등락률 상위 종목 목록
+        """
+        tr_id = "FHPST01700000"
+        url = f"{self.base_url}/uapi/domestic-stock/v1/ranking/fluctuation"
+
+        headers = self._get_headers(tr_id)
+        params = {
+            "fid_rsfl_rate2": "",  # 등락 비율2
+            "fid_cond_mrkt_div_code": "J",  # 조건 시장 분류 코드
+            "fid_cond_scr_div_code": "20170",  # 조건 화면 분류 코드
+            "fid_input_iscd": "0000",  # 입력 종목코드
+            "fid_rank_sort_cls_code": "0",  # 순위 정렬 구분 코드 (0: 상승율순)
+            "fid_input_cnt_1": "0",  # 입력 수1
+            "fid_prc_cls_code": "1",  # 가격 구분 코드
+            "fid_input_price_1": "",  # 입력 가격1
+            "fid_input_price_2": "",  # 입력 가격2
+            "fid_vol_cnt": "",  # 거래량 수
+            "fid_trgt_cls_code": "0",  # 대상 구분 코드
+            "fid_trgt_exls_cls_code": "0",  # 대상 제외 구분 코드
+            "fid_div_cls_code": "0",  # 분류 구분 코드
+            "fid_rsfl_rate1": ""  # 등락 비율1
+        }
+
+        self._log_request("GET", url, headers, params=params)
+        response = requests.get(url, headers=headers, params=params)
+
+        result = response.json() if response.status_code == 200 else {"error": response.text}
+        self._log_response("GET", url, response.status_code, result)
+
+        if response.status_code == 200:
+            # 상위 N개만 반환
+            if "output" in result:
+                result["output"] = result["output"][:top_n]
+            return result
+        else:
+            raise Exception(f"등락률 순위 조회 실패: {response.text}")
 
     def get_order_history(self) -> Dict:
         """주문 내역 조회"""
@@ -401,6 +445,7 @@ class KISAPIClient:
             return result
         else:
             raise Exception(f"주문 내역 조회 실패: {response.text}")
+        
 
 
 @lru_cache()
