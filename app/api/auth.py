@@ -230,6 +230,7 @@ async def login(
             httponly=True,
             secure=False,  # HTTPS에서는 True로 변경
             samesite="lax",
+            path="/",  # 모든 경로에서 쿠키 전송
             max_age=settings.session_expire_seconds
         )
 
@@ -272,7 +273,7 @@ async def logout(
                 session_manager.delete_session(session_id)
 
     # Cookie 삭제
-    response.delete_cookie("access_token")
+    response.delete_cookie("access_token", path="/")
 
     return LogoutResponse(
         success=True,

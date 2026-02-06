@@ -19,7 +19,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("api_logger")
 
-app = FastAPI()
 
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -31,7 +30,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         url = request.url.path
         method = request.method
         headers = dict(request.headers)
-        
+
         # Request Body 처리 (Body를 읽으면 스트림이 소비되므로 복사본 생성 필요)
         body = await request.body()
         request_body = body.decode() if body else None
@@ -43,7 +42,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         process_time = (time.time() - start_time) * 1000 # ms 단위
         response_body = [section async for section in response.body_iterator]
         response.body_iterator = iterate_in_threadpool(iter(response_body))
-        
+
         status_code = response.status_code
 
         # 4. 로그 출력 (JSON 형태로 찍으면 Kibana에서 검색하기 매우 편함)
@@ -60,13 +59,10 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 "body": response_body[0].decode() if response_body else None
             }
         }
-        
-        logger.info(log_dict)
-        
-        return response
 
-# 미들웨어 등록
-app.add_middleware(LoggingMiddleware)
+        logger.info(log_dict)
+
+        return response
 
 
 @asynccontextmanager
@@ -93,6 +89,7 @@ app = FastAPI(
 settings = get_settings()
 cors_origins = settings.cors_origins.split(",") if settings.cors_origins != "*" else ["*"]
 
+# CORS 미들웨어 추가
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -100,6 +97,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 로깅 미들웨어 추가
+app.add_middleware(LoggingMiddleware)
 
 app.include_router(auth.router)
 app.include_router(portfolio.router)
