@@ -1,13 +1,15 @@
 import { useParams } from 'react-router-dom'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { getStockDetail, getComments, createComment, updateComment, deleteComment, getStockNews } from '../services/api'
+import { getStockDetail, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock } from '../services/api'
 import { createChart } from 'lightweight-charts'
 import './StockDetail.css'
 
 function StockDetail() {
   const { symbol } = useParams()
   const { isLoggedIn, user } = useAuth()
+  const queryClient = useQueryClient()
   const [stockData, setStockData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -30,6 +32,53 @@ function StockDetail() {
   const [newsPage, setNewsPage] = useState(1)
   const [hasMoreNews, setHasMoreNews] = useState(false)
   const [totalNews, setTotalNews] = useState(0)
+
+  // 주문 관련 state
+  const [tradeTab, setTradeTab] = useState('buy')
+  const [orderForm, setOrderForm] = useState({
+    quantity: '',
+    price: '',
+    orderType: '00'
+  })
+
+  const buyMutation = useMutation({
+    mutationFn: buyStock,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['portfolio'])
+      alert('매수 주문이 접수되었습니다')
+      setOrderForm(prev => ({ ...prev, quantity: '' }))
+    },
+    onError: (error) => {
+      alert(`매수 실패: ${error.message}`)
+    }
+  })
+
+  const sellMutation = useMutation({
+    mutationFn: sellStock,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['portfolio'])
+      alert('매도 주문이 접수되었습니다')
+      setOrderForm(prev => ({ ...prev, quantity: '' }))
+    },
+    onError: (error) => {
+      alert(`매도 실패: ${error.message}`)
+    }
+  })
+
+  const handleOrder = (e) => {
+    e.preventDefault()
+    const orderData = {
+      stock_code: symbol,
+      quantity: parseInt(orderForm.quantity),
+      price: parseInt(orderForm.price),
+      order_type: orderForm.orderType
+    }
+    if (tradeTab === 'buy') {
+      buyMutation.mutate(orderData)
+    } else {
+      sellMutation.mutate(orderData)
+    }
+  }
 
   // 차트 관련 ref
   const chartContainerRef = useRef(null)
@@ -410,6 +459,13 @@ function StockDetail() {
     }
   }, [symbol])
 
+  // 현재가를 주문 가격에 동기화
+  useEffect(() => {
+    if (stockData?.basic_info?.current_price) {
+      setOrderForm(prev => ({ ...prev, price: String(stockData.basic_info.current_price) }))
+    }
+  }, [stockData?.basic_info?.current_price])
+
   if (loading && !stockData) {
     return (
       <div className="stock-detail">
@@ -620,6 +676,90 @@ function StockDetail() {
           </div>
         </section>
       )}
+
+      {/* 주문 */}
+      <section className="sd-card">
+        <h2>주문</h2>
+        {isLoggedIn ? (
+          <div className="sd-trade">
+            <div className="sd-trade-tabs">
+              <button
+                className={`sd-trade-tab buy ${tradeTab === 'buy' ? 'active' : ''}`}
+                onClick={() => setTradeTab('buy')}
+              >
+                매수
+              </button>
+              <button
+                className={`sd-trade-tab sell ${tradeTab === 'sell' ? 'active' : ''}`}
+                onClick={() => setTradeTab('sell')}
+              >
+                매도
+              </button>
+            </div>
+            <form className="sd-trade-form" onSubmit={handleOrder}>
+              <div className="sd-trade-group">
+                <label>주문유형</label>
+                <select
+                  value={orderForm.orderType}
+                  onChange={(e) => setOrderForm({ ...orderForm, orderType: e.target.value })}
+                >
+                  <option value="00">지정가</option>
+                  <option value="01">시장가</option>
+                </select>
+              </div>
+              <div className="sd-trade-group">
+                <label>가격</label>
+                <input
+                  type="number"
+                  value={orderForm.orderType === '01' ? '' : orderForm.price}
+                  onChange={(e) => setOrderForm({ ...orderForm, price: e.target.value })}
+                  placeholder={orderForm.orderType === '01' ? '시장가' : '주문 가격'}
+                  disabled={orderForm.orderType === '01'}
+                  min="0"
+                />
+              </div>
+              <div className="sd-trade-group">
+                <label>수량</label>
+                <input
+                  type="number"
+                  value={orderForm.quantity}
+                  onChange={(e) => setOrderForm({ ...orderForm, quantity: e.target.value })}
+                  placeholder="주문 수량"
+                  min="1"
+                  required
+                />
+              </div>
+              {orderForm.quantity && orderForm.price && orderForm.orderType !== '01' && (
+                <div className="sd-trade-total">
+                  <span className="sd-trade-total-label">총 주문금액</span>
+                  <span className="sd-trade-total-value">
+                    {formatNumber(parseInt(orderForm.quantity) * parseInt(orderForm.price))}원
+                  </span>
+                </div>
+              )}
+              <button
+                type="submit"
+                className={`sd-trade-btn ${tradeTab}`}
+                disabled={
+                  !orderForm.quantity ||
+                  (orderForm.orderType !== '01' && !orderForm.price) ||
+                  buyMutation.isPending ||
+                  sellMutation.isPending
+                }
+              >
+                {(buyMutation.isPending || sellMutation.isPending)
+                  ? '주문 중...'
+                  : tradeTab === 'buy' ? '매수' : '매도'
+                }
+              </button>
+            </form>
+          </div>
+        ) : (
+          <div className="sd-login-prompt">
+            로그인하면 주문할 수 있습니다.
+          </div>
+        )}
+      </section>
 
       {/* 뉴스 */}
       <section className="sd-card">

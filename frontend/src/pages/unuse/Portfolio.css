@@ -1,0 +1,474 @@
+/* ===================================================
+   Portfolio — 증권앱 스타일 (토스 스타일 통일)
+   =================================================== */
+
+/* ===== Base Layout ===== */
+.portfolio {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+}
+
+/* ===== Asset Hero (토스 스타일) ===== */
+.portfolio .asset-hero {
+  padding: 2rem 0.25rem 1rem;
+}
+
+.portfolio .asset-hero-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.portfolio .asset-hero-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.portfolio .asset-hero-price {
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -1px;
+  line-height: 1.15;
+}
+
+.portfolio .asset-hero-unit {
+  font-size: 1.5rem;
+  font-weight: 600;
+  opacity: 0.8;
+  margin-left: 1px;
+}
+
+.portfolio .asset-hero-change {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+
+.portfolio .asset-hero-sub {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 400;
+  margin-top: 0.35rem;
+}
+
+.portfolio .asset-hero-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.85rem;
+  padding: 0.4rem 0.85rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.portfolio .asset-hero-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.portfolio .asset-arrow {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.35);
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.portfolio .asset-arrow.expanded {
+  transform: rotate(180deg);
+}
+
+.portfolio .asset-detail {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+}
+
+.portfolio .asset-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.portfolio .asset-detail-row:last-child {
+  border-bottom: none;
+}
+
+.portfolio .asset-detail-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 400;
+}
+
+.portfolio .asset-detail-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* ===== Holdings Section ===== */
+.portfolio-holdings {
+  margin-top: 0.5rem;
+}
+
+.portfolio-holdings h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+  margin: 0 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.portfolio-holdings h2::before {
+  content: '';
+  width: 3px;
+  height: 1rem;
+  background: #646cff;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ===== Stock List (Home과 통일) ===== */
+.portfolio .stock-list {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.portfolio .stock-list-header {
+  display: grid;
+  grid-template-columns: 60px 1fr 120px 100px 100px;
+  padding: 0.75rem 1.25rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.portfolio .stock-list-item {
+  display: grid;
+  grid-template-columns: 60px 1fr 120px 100px 100px;
+  padding: 0.85rem 1.25rem;
+  text-decoration: none;
+  color: inherit;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.15s;
+  align-items: center;
+}
+
+.portfolio .stock-list-item:last-child {
+  border-bottom: none;
+}
+
+.portfolio .stock-list-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.portfolio .col-rank {
+  display: flex;
+  align-items: center;
+}
+
+.portfolio .rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 7px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.portfolio .col-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.portfolio .stock-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.portfolio .stock-code {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.portfolio .col-price {
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.portfolio .col-change {
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-align: right;
+}
+
+.portfolio .col-quantity {
+  font-size: 0.85rem;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+/* Price Colors */
+.portfolio .price-up {
+  color: #ef4444 !important;
+}
+
+.portfolio .price-down {
+  color: #3b82f6 !important;
+}
+
+/* ===== Empty State ===== */
+.portfolio .empty-holdings {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: center;
+}
+
+.portfolio .empty-holdings .empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.5;
+}
+
+.portfolio .empty-holdings p {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.portfolio .empty-sub {
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 0.8rem;
+}
+
+/* ===== Loading & Error States ===== */
+.portfolio .loading,
+.portfolio .error {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.88rem;
+}
+
+.portfolio .error {
+  color: #f87171;
+}
+
+/* ===== Responsive — Tablet ===== */
+@media (max-width: 768px) {
+  .portfolio .asset-hero-price {
+    font-size: 2rem;
+  }
+
+  .portfolio .stock-list-header,
+  .portfolio .stock-list-item {
+    grid-template-columns: 50px 1fr 90px 70px 70px;
+    padding: 0.7rem 1rem;
+  }
+
+  .portfolio .col-price,
+  .portfolio .col-change,
+  .portfolio .col-quantity {
+    font-size: 0.78rem;
+  }
+
+  .portfolio .stock-name {
+    font-size: 0.85rem;
+  }
+}
+
+/* ===== Responsive — Mobile ===== */
+@media (max-width: 480px) {
+  .portfolio {
+    padding: 0 0.5rem 2rem;
+  }
+
+  .portfolio .asset-hero {
+    padding: 1.5rem 0.25rem 0.75rem;
+  }
+
+  .portfolio .asset-hero-price {
+    font-size: 1.75rem;
+  }
+
+  .portfolio .asset-hero-unit {
+    font-size: 1.15rem;
+  }
+
+  .portfolio .asset-hero-change {
+    font-size: 0.88rem;
+  }
+
+  .portfolio .stock-list-header,
+  .portfolio .stock-list-item {
+    grid-template-columns: 40px 1fr 80px 60px;
+  }
+
+  .portfolio .col-change {
+    display: none;
+  }
+
+  .portfolio .empty-holdings {
+    padding: 2rem 1rem;
+  }
+}
+
+/* ===== Light Mode Support ===== */
+@media (prefers-color-scheme: light) {
+  .portfolio .asset-hero-price {
+    color: #111827;
+  }
+
+  .portfolio .asset-hero-unit {
+    color: #111827;
+  }
+
+  .portfolio .asset-hero-label {
+    color: rgba(17, 24, 39, 0.45);
+  }
+
+  .portfolio .asset-hero-sub {
+    color: rgba(17, 24, 39, 0.4);
+  }
+
+  .portfolio .asset-hero-toggle {
+    background: #f3f4f6;
+    border-color: #e5e7eb;
+    color: rgba(17, 24, 39, 0.5);
+  }
+
+  .portfolio .asset-hero-toggle:hover {
+    background: #e5e7eb;
+    color: rgba(17, 24, 39, 0.7);
+  }
+
+  .portfolio .asset-arrow {
+    color: rgba(17, 24, 39, 0.35);
+  }
+
+  .portfolio .asset-detail {
+    background: #f9fafb;
+    border-color: #e5e7eb;
+  }
+
+  .portfolio .asset-detail-row {
+    border-bottom-color: #e5e7eb;
+  }
+
+  .portfolio .asset-detail-label {
+    color: rgba(17, 24, 39, 0.45);
+  }
+
+  .portfolio .asset-detail-value {
+    color: #111827;
+  }
+
+  .portfolio-holdings h2 {
+    color: #111827;
+  }
+
+  .portfolio .stock-list {
+    background: #fff;
+    border-color: #e5e7eb;
+  }
+
+  .portfolio .stock-list-header {
+    color: rgba(17, 24, 39, 0.45);
+    border-bottom-color: #e5e7eb;
+  }
+
+  .portfolio .stock-list-item {
+    border-color: #f3f4f6;
+  }
+
+  .portfolio .stock-list-item:hover {
+    background: #f9fafb;
+  }
+
+  .portfolio .stock-name {
+    color: #111827;
+  }
+
+  .portfolio .stock-code {
+    color: rgba(17, 24, 39, 0.4);
+  }
+
+  .portfolio .col-price {
+    color: #111827;
+  }
+
+  .portfolio .col-quantity {
+    color: rgba(17, 24, 39, 0.7);
+  }
+
+  .portfolio .rank-badge {
+    background: #e5e7eb;
+    color: #111827;
+  }
+
+  .portfolio .price-up {
+    color: #dc2626 !important;
+  }
+
+  .portfolio .price-down {
+    color: #2563eb !important;
+  }
+
+  .portfolio .empty-holdings {
+    background: #fff;
+    border-color: #e5e7eb;
+  }
+
+  .portfolio .empty-holdings p {
+    color: rgba(17, 24, 39, 0.45);
+  }
+
+  .portfolio .empty-sub {
+    color: rgba(17, 24, 39, 0.3);
+  }
+
+  .portfolio .asset-hero-change.price-up {
+    color: #dc2626;
+  }
+
+  .portfolio .asset-hero-change.price-down {
+    color: #2563eb;
+  }
+}

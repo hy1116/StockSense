@@ -32,13 +32,13 @@ function Home() {
 
   const { data: topStocksData, isLoading: isLoadingStocks } = useQuery({
     queryKey: ['topStocks'],
-    queryFn: () => getTopStocks(10),
+    queryFn: () => getTopStocks(20),
     refetchInterval: 60000,
   })
 
   const { data: marketCapData, isLoading: isLoadingMarketCap } = useQuery({
     queryKey: ['marketCapStocks'],
-    queryFn: () => getMarketCapStocks(10),
+    queryFn: () => getMarketCapStocks(20),
     refetchInterval: 60000,
   })
 

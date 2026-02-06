@@ -17,9 +17,9 @@ function Layout() {
         <div className="header-content">
           <h1 className="logo"><Link to="/">StockSense</Link></h1>
           <nav className="nav">
-            <Link to="/">홈</Link>
+            {/* <Link to="/">홈</Link>
             {isLoggedIn && <Link to="/portfolio">포트폴리오</Link>}
-            <Link to="/prediction">예측</Link>
+            <Link to="/prediction">예측</Link> */}
           </nav>
           <div className="auth-section">
             {isLoggedIn ? (
@@ -41,7 +41,6 @@ function Layout() {
         <Outlet />
       </main>
       <footer className="footer">
-        <p className="deployed-by">Deployed by <strong>Hyunyoung</strong> : stable build v1.0</p>
         <p>&copy; 2026 StockSense. All rights reserved.</p>
       </footer>
     </div>
