@@ -334,27 +334,6 @@ function Home() {
           )
         )}
       </section>
-
-      <section className="features">
-        <h2>주요 기능</h2>
-        <div className="feature-grid">
-          <div className="feature-card">
-            <div className="feature-icon">📊</div>
-            <h3>실시간 데이터</h3>
-            <p>주요 주식 시장의 실시간 데이터 제공</p>
-          </div>
-          <div className="feature-card">
-            <div className="feature-icon">🤖</div>
-            <h3>AI 예측</h3>
-            <p>머신러닝 기반 주가 예측</p>
-          </div>
-          <div className="feature-card">
-            <div className="feature-icon">📈</div>
-            <h3>차트 분석</h3>
-            <p>다양한 기술적 지표 시각화</p>
-          </div>
-        </div>
-      </section>
     </div>
   )
 }
