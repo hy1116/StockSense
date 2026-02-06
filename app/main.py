@@ -1,4 +1,4 @@
-from time import time
+import time
 from fastapi import FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.concurrency import iterate_in_threadpool
