@@ -224,14 +224,13 @@ async def login(
         )
 
         # 7. HttpOnly Cookie 설정
-        # 클라우드플레어 터널에서는 secure=True, samesite="none" 필요
         response.set_cookie(
             key="access_token",
             value=access_token,
             httponly=True,
-            secure=True,  # HTTPS 환경에서 필수 (클라우드플레어)
-            samesite="none",  # 크로스 사이트 요청에서도 쿠키 전송
-            path="/",  # 모든 경로에서 쿠키 전송
+            secure=True,
+            samesite="lax",
+            path="/",
             max_age=settings.session_expire_seconds
         )
 
@@ -273,8 +272,13 @@ async def logout(
                 session_manager = get_session_manager()
                 session_manager.delete_session(session_id)
 
-    # Cookie 삭제
-    response.delete_cookie("access_token", path="/")
+    # Cookie 삭제 (set_cookie와 동일한 속성 필요)
+    response.delete_cookie(
+        "access_token",
+        path="/",
+        secure=True,
+        samesite="lax"
+    )
 
     return LogoutResponse(
         success=True,

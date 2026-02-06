@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     session_expire_seconds: int = 60 * 60 * 24  # 24시간
 
     # CORS Configuration
-    cors_origins: str = "*"
+    cors_origins: str = "https://stocksense.hypepia.com,http://localhost:3000"
 
     class Config:
         env_file = ".env"
