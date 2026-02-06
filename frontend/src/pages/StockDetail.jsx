@@ -11,7 +11,7 @@ function StockDetail() {
   const [stockData, setStockData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [period, setPeriod] = useState('D') // 기본값을 일봉으로
+  const [period, setPeriod] = useState('D')
 
   // 댓글 관련 state
   const [comments, setComments] = useState([])
@@ -155,7 +155,6 @@ function StockDetail() {
     const diff = (now - date) / 1000
 
     if (diff < 0) {
-      // 미래 시간 (예약 기사) - 실제 게시 시간 표시
       return date.toLocaleString('ko-KR', {
         month: 'long',
         day: 'numeric',
@@ -193,18 +192,49 @@ function StockDetail() {
   }
 
   const formatNumber = (num) => {
-    if (!num) return '0'
+    if (!num && num !== 0) return '-'
     return num.toLocaleString('ko-KR')
   }
 
   const formatPrice = (price) => {
+    if (!price && price !== 0) return '-'
     return `${formatNumber(price)}원`
+  }
+
+  // 시가총액 포맷 (억 단위)
+  const formatMarketCap = (cap) => {
+    if (!cap) return '-'
+    if (cap >= 1000000000000) {
+      return `${(cap / 1000000000000).toFixed(1)}조`
+    }
+    if (cap >= 100000000) {
+      return `${(cap / 100000000).toFixed(0)}억`
+    }
+    return formatNumber(cap)
+  }
+
+  // 거래량 포맷 (만 단위)
+  const formatVolume = (vol) => {
+    if (!vol) return '-'
+    if (vol >= 100000000) {
+      return `${(vol / 100000000).toFixed(1)}억`
+    }
+    if (vol >= 10000) {
+      return `${(vol / 10000).toFixed(0)}만`
+    }
+    return formatNumber(vol)
   }
 
   const getPriceChangeClass = (change) => {
     if (change > 0) return 'price-up'
     if (change < 0) return 'price-down'
     return ''
+  }
+
+  const getChangeIcon = (change) => {
+    if (change > 0) return '▲'
+    if (change < 0) return '▼'
+    return '-'
   }
 
   // lightweight-charts 초기화
@@ -222,39 +252,34 @@ function StockDetail() {
       volumeSeriesRef.current = null
     }
 
-    // 일봉/주봉/월봉만 지원
-    const isMinute = false
-
-    // 날짜순 정렬 (오래된 것부터)
     const sortedData = [...chartData].reverse()
 
-    // 차트 생성
     const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
-      height: 500,
+      height: 400,
       layout: {
-        background: { color: '#1e222d' },
-        textColor: '#d1d4dc',
+        background: { color: 'transparent' },
+        textColor: '#6b7280',
+        fontSize: 11,
       },
       grid: {
-        vertLines: { color: '#2b2b43' },
-        horzLines: { color: '#2b2b43' },
+        vertLines: { color: 'rgba(255,255,255,0.04)' },
+        horzLines: { color: 'rgba(255,255,255,0.04)' },
       },
       crosshair: {
-        mode: 1, // Normal mode
+        mode: 1,
+        vertLine: { color: 'rgba(255,255,255,0.15)', width: 1, style: 2 },
+        horzLine: { color: 'rgba(255,255,255,0.15)', width: 1, style: 2 },
       },
       rightPriceScale: {
         borderVisible: false,
-        scaleMargins: {
-          top: 0.1,
-          bottom: 0.2, // 거래량을 위한 하단 여백 증가
-        },
+        scaleMargins: { top: 0.08, bottom: 0.2 },
       },
       timeScale: {
         borderVisible: false,
-        timeVisible: true, // 항상 시간 표시
+        timeVisible: true,
         secondsVisible: false,
-        rightOffset: 1,
+        rightOffset: 2,
         barSpacing: 10,
         minBarSpacing: 3,
       },
@@ -262,53 +287,41 @@ function StockDetail() {
 
     chartInstanceRef.current = chart
 
-    // 캔들스틱 시리즈 추가 (v4 API) - 기본 priceScale 사용
     const candleSeries = chart.addCandlestickSeries({
-      upColor: '#ef5350',
-      downColor: '#26a69a',
+      upColor: '#ef4444',
+      downColor: '#3b82f6',
       borderVisible: true,
-      wickUpColor: '#ef5350',
-      wickDownColor: '#26a69a',
-      borderUpColor: '#ef5350',
-      borderDownColor: '#26a69a',
+      wickUpColor: '#ef4444',
+      wickDownColor: '#3b82f6',
+      borderUpColor: '#ef4444',
+      borderDownColor: '#3b82f6',
     })
     candlestickSeriesRef.current = candleSeries
 
-    // 거래량 시리즈 추가 (v4 API) - 별도 priceScale 사용
     const volumeSeries = chart.addHistogramSeries({
-      color: '#26a69a',
-      priceFormat: {
-        type: 'volume',
-      },
-      priceScaleId: 'volume', // 별도 스케일 ID 지정
+      color: '#3b82f6',
+      priceFormat: { type: 'volume' },
+      priceScaleId: 'volume',
     })
 
-    // 거래량 priceScale 설정
     chart.priceScale('volume').applyOptions({
-      scaleMargins: {
-        top: 0.8, // 상단 85% 지점부터 시작
-        bottom: 0, // 하단 0%
-      },
+      scaleMargins: { top: 0.82, bottom: 0 },
     })
 
     volumeSeriesRef.current = volumeSeries
 
-    // 데이터 변환 및 설정
     let candleData = []
     let volumeData = []
-    const seenTimes = new Set() // 중복 시간값 체크
+    const seenTimes = new Set()
 
-    // 일봉/주봉/월봉: YYYYMMDD → YYYY-MM-DD
     sortedData.forEach(d => {
-      if (!d.date || d.date.length < 8) return // 유효하지 않은 데이터 건너뛰기
+      if (!d.date || d.date.length < 8) return
 
       const time = `${d.date.slice(0, 4)}-${d.date.slice(4, 6)}-${d.date.slice(6, 8)}`
 
-      // 중복 시간값 제거
       if (seenTimes.has(time)) return
       seenTimes.add(time)
 
-      // 유효한 OHLC 데이터인지 확인
       if (d.open > 0 && d.high > 0 && d.low > 0 && d.close > 0) {
         candleData.push({
           time: time,
@@ -321,7 +334,7 @@ function StockDetail() {
         volumeData.push({
           time: time,
           value: d.volume || 0,
-          color: d.close >= d.open ? '#ef535080' : '#26a69a80',
+          color: d.close >= d.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
         })
       }
     })
@@ -329,10 +342,8 @@ function StockDetail() {
     candleSeries.setData(candleData)
     volumeSeries.setData(volumeData)
 
-    // 차트 자동 맞춤
     chart.timeScale().fitContent()
 
-    // 리사이즈 핸들러
     const handleResize = () => {
       if (chartContainerRef.current && chartInstanceRef.current) {
         chartInstanceRef.current.applyOptions({
@@ -371,17 +382,13 @@ function StockDetail() {
     const hours = now.getHours()
     const minutes = now.getMinutes()
     const currentTime = hours * 100 + minutes
-
-    // 09:00 ~ 15:30 (0900 ~ 1530)
     return currentTime >= 900 && currentTime <= 1530
   }
 
-  // 주기적 데이터 갱신 - 장 운영 시간에만 3초마다
+  // 주기적 데이터 갱신
   useEffect(() => {
-    // 초기 로드 (loading 표시)
     fetchStockDetail(true)
 
-    // 장 운영 시간에만 3초마다 자동 갱신 (loading 표시 안함)
     if (isMarketOpen()) {
       autoRefreshIntervalRef.current = setInterval(() => {
         fetchStockDetail(false)
@@ -406,7 +413,10 @@ function StockDetail() {
   if (loading && !stockData) {
     return (
       <div className="stock-detail">
-        <div className="loading">데이터를 불러오는 중...</div>
+        <div className="sd-loading">
+          <div className="sd-loading-spinner" />
+          <span>데이터를 불러오는 중...</span>
+        </div>
       </div>
     )
   }
@@ -414,7 +424,7 @@ function StockDetail() {
   if (error) {
     return (
       <div className="stock-detail">
-        <div className="error">{error}</div>
+        <div className="sd-error">{error}</div>
       </div>
     )
   }
@@ -422,168 +432,202 @@ function StockDetail() {
   if (!stockData) {
     return (
       <div className="stock-detail">
-        <div className="error">데이터를 찾을 수 없습니다</div>
+        <div className="sd-error">데이터를 찾을 수 없습니다</div>
       </div>
     )
   }
 
   const { basic_info, chart_data, prediction } = stockData
 
+  // 예측 기반 등락 계산
+  const predictionChange = prediction
+    ? ((prediction.predicted_price - basic_info.current_price) / basic_info.current_price * 100)
+    : null
+
   return (
     <div className="stock-detail">
-      {/* 헤더 - 종목 기본 정보 */}
-      <div className="stock-header">
-        <div className="stock-title">
-          <h1>{basic_info.stock_name}</h1>
-          <span className="market-badge">{basic_info.market}</span>
-          <span className="stock-code">{basic_info.stock_code}</span>
-        </div>
-        <div className="stock-price-info">
-          <div className="current-price">
-            {formatPrice(basic_info.current_price)}
-          </div>
-          <div className={`price-change ${getPriceChangeClass(basic_info.change_price)}`}>
-            {basic_info.change_price > 0 ? '+' : ''}
-            {formatPrice(basic_info.change_price)} ({basic_info.change_rate > 0 ? '+' : ''}
-            {basic_info.change_rate.toFixed(2)}%)
+      {/* 상단 종목 헤더 */}
+      <section className="sd-hero">
+        <div className="sd-hero-top">
+          <div className="sd-name-area">
+            <h1 className="sd-stock-name">{basic_info.stock_name}</h1>
+            <div className="sd-meta">
+              <span className="sd-stock-code">{basic_info.stock_code}</span>
+              <span className="sd-market-badge">{basic_info.market}</span>
+            </div>
           </div>
         </div>
-      </div>
+        <div className="sd-price-area">
+          <span className={`sd-current-price ${getPriceChangeClass(basic_info.change_price)}`}>
+            {formatNumber(basic_info.current_price)}
+            <span className="sd-price-unit">원</span>
+          </span>
+          <div className={`sd-change-row ${getPriceChangeClass(basic_info.change_price)}`}>
+            <span className="sd-change-icon">{getChangeIcon(basic_info.change_price)}</span>
+            <span className="sd-change-price">{formatNumber(Math.abs(basic_info.change_price))}원</span>
+            <span className="sd-change-rate">
+              {basic_info.change_rate > 0 ? '+' : ''}{basic_info.change_rate.toFixed(2)}%
+            </span>
+          </div>
+        </div>
+      </section>
 
-      {/* 차트 */}
-      <div className="card">
-        <div className="card-header">
+      {/* 핵심 투자 지표 */}
+      <section className="sd-metrics">
+        <div className="sd-metric-item">
+          <span className="sd-metric-label">시가총액</span>
+          <span className="sd-metric-value">{formatMarketCap(basic_info.market_cap)}</span>
+        </div>
+        <div className="sd-metric-divider" />
+        <div className="sd-metric-item">
+          <span className="sd-metric-label">거래량</span>
+          <span className="sd-metric-value">{formatVolume(basic_info.volume)}</span>
+        </div>
+        <div className="sd-metric-divider" />
+        <div className="sd-metric-item">
+          <span className="sd-metric-label">PER</span>
+          <span className="sd-metric-value">{basic_info.per ? basic_info.per.toFixed(2) : '-'}</span>
+        </div>
+        <div className="sd-metric-divider" />
+        <div className="sd-metric-item">
+          <span className="sd-metric-label">PBR</span>
+          <span className="sd-metric-value">{basic_info.pbr ? basic_info.pbr.toFixed(2) : '-'}</span>
+        </div>
+      </section>
+
+      {/* 차트 영역 */}
+      <section className="sd-card">
+        <div className="sd-card-header">
           <h2>차트</h2>
-          <div className="period-selector">
-            <button
-              className={period === 'D' ? 'active' : ''}
-              onClick={() => setPeriod('D')}
-            >
-              일
-            </button>
-            <button
-              className={period === 'W' ? 'active' : ''}
-              onClick={() => setPeriod('W')}
-            >
-              주
-            </button>
-            <button
-              className={period === 'M' ? 'active' : ''}
-              onClick={() => setPeriod('M')}
-            >
-              월
-            </button>
+          <div className="sd-period-selector">
+            {[
+              { key: 'D', label: '일' },
+              { key: 'W', label: '주' },
+              { key: 'M', label: '월' },
+            ].map(p => (
+              <button
+                key={p.key}
+                className={period === p.key ? 'active' : ''}
+                onClick={() => setPeriod(p.key)}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
         </div>
-        <div className="chart-container">
+        <div className="sd-chart-container">
           {chart_data && chart_data.length > 0 ? (
-            <div ref={chartContainerRef} style={{ position: 'relative', width: '100%', height: '500px' }} />
+            <div ref={chartContainerRef} style={{ position: 'relative', width: '100%', height: '400px' }} />
           ) : (
-            <p>차트 데이터가 없습니다</p>
+            <p className="sd-empty">차트 데이터가 없습니다</p>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* 기본 정보 */}
-      <div className="card">
-        <h2>기본 정보</h2>
-        <div className="info-grid">
-          <div className="info-item">
-            <span className="info-label">현재가</span>
-            <span className="info-value">{formatPrice(basic_info.current_price)}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">전일대비</span>
-            <span className={`info-value ${getPriceChangeClass(basic_info.change_price)}`}>
-              {basic_info.change_price > 0 ? '+' : ''}
-              {formatPrice(basic_info.change_price)}
+      {/* 투자 정보 카드 */}
+      <section className="sd-card">
+        <h2>투자 정보</h2>
+        <div className="sd-info-table">
+          <div className="sd-info-row">
+            <span className="sd-info-key">현재가</span>
+            <span className={`sd-info-val ${getPriceChangeClass(basic_info.change_price)}`}>
+              {formatPrice(basic_info.current_price)}
             </span>
           </div>
-          <div className="info-item">
-            <span className="info-label">등락률</span>
-            <span className={`info-value ${getPriceChangeClass(basic_info.change_rate)}`}>
-              {basic_info.change_rate > 0 ? '+' : ''}
-              {basic_info.change_rate.toFixed(2)}%
+          <div className="sd-info-row">
+            <span className="sd-info-key">전일대비</span>
+            <span className={`sd-info-val ${getPriceChangeClass(basic_info.change_price)}`}>
+              {basic_info.change_price > 0 ? '+' : ''}{formatPrice(basic_info.change_price)}
+              <span className="sd-info-sub">
+                ({basic_info.change_rate > 0 ? '+' : ''}{basic_info.change_rate.toFixed(2)}%)
+              </span>
             </span>
           </div>
-          <div className="info-item">
-            <span className="info-label">거래량</span>
-            <span className="info-value">{formatNumber(basic_info.volume)}</span>
+          <div className="sd-info-row">
+            <span className="sd-info-key">거래량</span>
+            <span className="sd-info-val">{formatNumber(basic_info.volume)}주</span>
           </div>
           {basic_info.market_cap && (
-            <div className="info-item">
-              <span className="info-label">시가총액</span>
-              <span className="info-value">{formatPrice(basic_info.market_cap)}</span>
+            <div className="sd-info-row">
+              <span className="sd-info-key">시가총액</span>
+              <span className="sd-info-val">{formatMarketCap(basic_info.market_cap)}</span>
             </div>
           )}
           {basic_info.per && (
-            <div className="info-item">
-              <span className="info-label">PER</span>
-              <span className="info-value">{basic_info.per.toFixed(2)}</span>
+            <div className="sd-info-row">
+              <span className="sd-info-key">PER</span>
+              <span className="sd-info-val">{basic_info.per.toFixed(2)}배</span>
             </div>
           )}
           {basic_info.pbr && (
-            <div className="info-item">
-              <span className="info-label">PBR</span>
-              <span className="info-value">{basic_info.pbr.toFixed(2)}</span>
+            <div className="sd-info-row">
+              <span className="sd-info-key">PBR</span>
+              <span className="sd-info-val">{basic_info.pbr.toFixed(2)}배</span>
             </div>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* 예측 정보 */}
+      {/* AI 예측 */}
       {prediction && (
-        <div className="card">
+        <section className="sd-card">
           <h2>AI 예측</h2>
-          <div className="prediction-container">
-            <div className="prediction-main">
-              <div className="prediction-item">
-                <span className="prediction-label">예측가</span>
-                <span className="prediction-value price-highlight">
-                  {formatPrice(Math.round(prediction.predicted_price))}
-                </span>
+          <div className="sd-prediction">
+            <div className="sd-pred-hero">
+              <div className="sd-pred-price-block">
+                <span className="sd-pred-label">예측가</span>
+                <span className="sd-pred-price">{formatPrice(Math.round(prediction.predicted_price))}</span>
+                {predictionChange !== null && (
+                  <span className={`sd-pred-diff ${predictionChange >= 0 ? 'price-up' : 'price-down'}`}>
+                    {predictionChange >= 0 ? '+' : ''}{predictionChange.toFixed(2)}%
+                  </span>
+                )}
               </div>
-              <div className="prediction-item">
-                <span className="prediction-label">예측일</span>
-                <span className="prediction-value">{prediction.prediction_date}</span>
+              <div className="sd-pred-date">
+                <span className="sd-pred-label">예측일</span>
+                <span>{prediction.prediction_date}</span>
               </div>
             </div>
-            <div className="prediction-details">
-              <div className="prediction-item">
-                <span className="prediction-label">추세</span>
-                <span className={`prediction-badge trend-${prediction.trend.includes('상승') ? 'up' : prediction.trend.includes('하락') ? 'down' : 'neutral'}`}>
+            <div className="sd-pred-badges">
+              <div className="sd-pred-badge-item">
+                <span className="sd-pred-badge-label">추세</span>
+                <span className={`sd-badge trend-${prediction.trend.includes('상승') ? 'up' : prediction.trend.includes('하락') ? 'down' : 'neutral'}`}>
                   {prediction.trend}
                 </span>
               </div>
-              <div className="prediction-item">
-                <span className="prediction-label">투자의견</span>
-                <span className={`prediction-badge recommend-${prediction.recommendation}`}>
+              <div className="sd-pred-badge-item">
+                <span className="sd-pred-badge-label">투자의견</span>
+                <span className={`sd-badge recommend-${prediction.recommendation}`}>
                   {prediction.recommendation}
                 </span>
               </div>
-              <div className="prediction-item">
-                <span className="prediction-label">신뢰도</span>
-                <span className="prediction-value">
-                  {(prediction.confidence * 100).toFixed(0)}%
-                </span>
+              <div className="sd-pred-badge-item">
+                <span className="sd-pred-badge-label">신뢰도</span>
+                <div className="sd-confidence">
+                  <div className="sd-confidence-bar">
+                    <div
+                      className="sd-confidence-fill"
+                      style={{ width: `${(prediction.confidence * 100).toFixed(0)}%` }}
+                    />
+                  </div>
+                  <span className="sd-confidence-text">{(prediction.confidence * 100).toFixed(0)}%</span>
+                </div>
               </div>
             </div>
-            <div className="prediction-note">
+            <p className="sd-pred-disclaimer">
               * 이 예측은 단순 이동평균 기반 분석이며, 투자 권유가 아닙니다.
-            </div>
+            </p>
           </div>
-        </div>
+        </section>
       )}
 
-      {/* 뉴스 섹션 */}
-      <div className="card">
-        <h2>관련 뉴스 ({totalNews})</h2>
+      {/* 뉴스 */}
+      <section className="sd-card">
+        <h2>관련 뉴스 <span className="sd-count">{totalNews}</span></h2>
 
-        <div className="news-list">
+        <div className="sd-news-list">
           {news.length === 0 && !newsLoading ? (
-            <div className="no-news">
-              최근 뉴스가 없습니다.
-            </div>
+            <p className="sd-empty">최근 뉴스가 없습니다.</p>
           ) : (
             news.map((item) => (
               <a
@@ -591,17 +635,17 @@ function StockDetail() {
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="news-item"
+                className="sd-news-item"
               >
-                <div className="news-content">
-                  <div className="news-title">{item.title}</div>
-                  <div className="news-meta">
-                    {item.source && <span className="news-source">{item.source}</span>}
-                    <span className="news-time">{formatNewsTime(item.published_at)}</span>
+                <div className="sd-news-body">
+                  <span className="sd-news-title">{item.title}</span>
+                  <div className="sd-news-meta">
+                    {item.source && <span className="sd-news-source">{item.source}</span>}
+                    <span className="sd-news-time">{formatNewsTime(item.published_at)}</span>
                   </div>
                 </div>
                 {item.image_url && (
-                  <div className="news-thumbnail">
+                  <div className="sd-news-thumb">
                     <img src={item.image_url} alt="" loading="lazy" />
                   </div>
                 )}
@@ -609,84 +653,73 @@ function StockDetail() {
             ))
           )}
 
-          {newsLoading && (
-            <div className="news-loading">뉴스를 불러오는 중...</div>
-          )}
+          {newsLoading && <p className="sd-loading-text">뉴스를 불러오는 중...</p>}
 
           {hasMoreNews && !newsLoading && (
-            <button
-              className="load-more-btn"
-              onClick={() => fetchNews(newsPage + 1)}
-            >
+            <button className="sd-more-btn" onClick={() => fetchNews(newsPage + 1)}>
               더 보기
             </button>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* 댓글 섹션 */}
-      <div className="card">
-        <h2>커뮤니티 ({totalComments})</h2>
+      {/* 커뮤니티 (댓글) */}
+      <section className="sd-card">
+        <h2>커뮤니티 <span className="sd-count">{totalComments}</span></h2>
 
         {/* 댓글 작성 폼 */}
         {isLoggedIn ? (
-          <form className="comment-form" onSubmit={handleSubmitComment}>
-            <div className="comment-input-wrapper">
-              <textarea
-                className="comment-input"
-                placeholder="이 종목에 대한 의견을 남겨주세요..."
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                maxLength={1000}
-                rows={3}
-              />
-              <div className="comment-form-footer">
-                <span className="char-count">{newComment.length}/1000</span>
-                <button
-                  type="submit"
-                  className="comment-submit-btn"
-                  disabled={!newComment.trim() || commentSubmitting}
-                >
-                  {commentSubmitting ? '작성 중...' : '작성'}
-                </button>
-              </div>
+          <form className="sd-comment-form" onSubmit={handleSubmitComment}>
+            <textarea
+              className="sd-comment-input"
+              placeholder="이 종목에 대한 의견을 남겨주세요..."
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              maxLength={1000}
+              rows={3}
+            />
+            <div className="sd-comment-form-footer">
+              <span className="sd-char-count">{newComment.length}/1000</span>
+              <button
+                type="submit"
+                className="sd-submit-btn"
+                disabled={!newComment.trim() || commentSubmitting}
+              >
+                {commentSubmitting ? '작성 중...' : '작성'}
+              </button>
             </div>
           </form>
         ) : (
-          <div className="login-prompt">
+          <div className="sd-login-prompt">
             로그인하면 댓글을 작성할 수 있습니다.
           </div>
         )}
 
         {/* 댓글 목록 */}
-        <div className="comments-list">
+        <div className="sd-comments">
           {comments.length === 0 && !commentLoading ? (
-            <div className="no-comments">
-              아직 댓글이 없습니다. 첫 번째 댓글을 남겨보세요!
-            </div>
+            <p className="sd-empty">아직 댓글이 없습니다. 첫 번째 댓글을 남겨보세요!</p>
           ) : (
             comments.map((comment) => (
-              <div key={comment.id} className="comment-item">
-                <div className="comment-header">
-                  <span className="comment-author">{comment.username}</span>
-                  <span className="comment-time">{formatCommentTime(comment.created_at)}</span>
-                  {comment.updated_at && (
-                    <span className="comment-edited">(수정됨)</span>
-                  )}
+              <div key={comment.id} className="sd-comment">
+                <div className="sd-comment-head">
+                  <span className="sd-comment-author">{comment.username}</span>
+                  <span className="sd-comment-time">{formatCommentTime(comment.created_at)}</span>
+                  {comment.updated_at && <span className="sd-comment-edited">(수정됨)</span>}
                 </div>
 
                 {editingCommentId === comment.id ? (
-                  <div className="comment-edit-form">
+                  <div className="sd-comment-edit">
                     <textarea
-                      className="comment-input"
+                      className="sd-comment-input"
                       value={editingContent}
                       onChange={(e) => setEditingContent(e.target.value)}
                       maxLength={1000}
                       rows={3}
                     />
-                    <div className="comment-edit-actions">
+                    <div className="sd-comment-edit-actions">
                       <button
-                        className="btn-cancel"
+                        className="sd-btn-ghost"
                         onClick={() => {
                           setEditingCommentId(null)
                           setEditingContent('')
@@ -695,7 +728,7 @@ function StockDetail() {
                         취소
                       </button>
                       <button
-                        className="btn-save"
+                        className="sd-btn-primary"
                         onClick={() => handleUpdateComment(comment.id)}
                         disabled={!editingContent.trim() || commentSubmitting}
                       >
@@ -705,11 +738,11 @@ function StockDetail() {
                   </div>
                 ) : (
                   <>
-                    <div className="comment-content">{comment.content}</div>
+                    <p className="sd-comment-body">{comment.content}</p>
                     {comment.is_mine && (
-                      <div className="comment-actions">
+                      <div className="sd-comment-actions">
                         <button
-                          className="btn-edit"
+                          className="sd-btn-text edit"
                           onClick={() => {
                             setEditingCommentId(comment.id)
                             setEditingContent(comment.content)
@@ -718,7 +751,7 @@ function StockDetail() {
                           수정
                         </button>
                         <button
-                          className="btn-delete"
+                          className="sd-btn-text delete"
                           onClick={() => handleDeleteComment(comment.id)}
                         >
                           삭제
@@ -731,20 +764,15 @@ function StockDetail() {
             ))
           )}
 
-          {commentLoading && (
-            <div className="comment-loading">댓글을 불러오는 중...</div>
-          )}
+          {commentLoading && <p className="sd-loading-text">댓글을 불러오는 중...</p>}
 
           {hasMoreComments && !commentLoading && (
-            <button
-              className="load-more-btn"
-              onClick={() => fetchComments(commentPage + 1)}
-            >
+            <button className="sd-more-btn" onClick={() => fetchComments(commentPage + 1)}>
               더 보기
             </button>
           )}
         </div>
-      </div>
+      </section>
     </div>
   )
 }
