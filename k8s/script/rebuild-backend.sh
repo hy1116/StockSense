@@ -28,6 +28,15 @@ echo "📁 Project root: $PROJECT_ROOT"
 echo ""
 
 # ============================================
+# 0. Git
+# ============================================
+echo "▶ [1/9] Pulling latest code from Git..."
+git pull origin main || {
+    error "Git pull failed"
+    exit 1
+}
+
+# ============================================
 # 1. Docker 이미지 빌드 (먼저 빌드해야 Job에서 사용 가능)
 # ============================================
 echo "   Building backend image..."
