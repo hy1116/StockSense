@@ -68,7 +68,6 @@ echo ""
 echo "▶ [2/9] Creating namespace, configmap, secret, rbac..."
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/secret.yaml
 kubectl apply -f k8s/argo-rbac.yaml
 success "Basic resources created"
 
