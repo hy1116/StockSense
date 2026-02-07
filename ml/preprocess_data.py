@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from typing import Optional
 
 # Windows 콘솔 인코딩 설정
 if sys.platform == "win32":
@@ -110,6 +111,92 @@ class DataPreprocessor:
 
         return df
 
+    def load_news_sentiment(self, stock_code: str) -> Optional[pd.DataFrame]:
+        """DB에서 종목별 뉴스 감성 데이터를 일별로 집계
+
+        Returns:
+            날짜별 뉴스 감성 피처 DataFrame:
+            - news_sentiment_avg: 당일 평균 감성 점수 (-100~100)
+            - news_count: 당일 뉴스 건수
+            - news_positive_ratio: 긍정 뉴스 비율 (0~1)
+            - news_negative_ratio: 부정 뉴스 비율 (0~1)
+        """
+        try:
+            from dotenv import load_dotenv
+            from sqlalchemy import create_engine, text
+
+            load_dotenv()
+            db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/stocksense")
+            db_url = db_url.replace("+asyncpg", "")
+            engine = create_engine(db_url)
+
+            query = text("""
+                SELECT
+                    DATE(published_at) as date,
+                    AVG(sentiment_score) as news_sentiment_avg,
+                    COUNT(*) as news_count,
+                    SUM(CASE WHEN sentiment_label = 'positive' THEN 1 ELSE 0 END)::float
+                        / COUNT(*) as news_positive_ratio,
+                    SUM(CASE WHEN sentiment_label = 'negative' THEN 1 ELSE 0 END)::float
+                        / COUNT(*) as news_negative_ratio
+                FROM stock_news
+                WHERE stock_code = :stock_code
+                    AND is_processed = true
+                    AND published_at IS NOT NULL
+                    AND sentiment_score IS NOT NULL
+                GROUP BY DATE(published_at)
+                ORDER BY date
+            """)
+
+            df = pd.read_sql(query, engine, params={"stock_code": stock_code})
+
+            if df.empty:
+                print(f"   No news sentiment data for {stock_code}")
+                return None
+
+            df["date"] = pd.to_datetime(df["date"])
+            print(f"   Loaded {len(df)} days of news sentiment data")
+            return df
+
+        except Exception as e:
+            print(f"   ⚠️ Failed to load news sentiment: {e}")
+            return None
+
+    def merge_news_features(self, df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
+        """뉴스 감성 피처를 기술적 지표 DataFrame에 병합"""
+        news_df = self.load_news_sentiment(stock_code)
+
+        # 뉴스 피처 컬럼 초기화 (뉴스 데이터 없어도 컬럼 존재해야 함)
+        df["news_sentiment_avg"] = 0.0
+        df["news_count"] = 0
+        df["news_positive_ratio"] = 0.0
+        df["news_negative_ratio"] = 0.0
+
+        if news_df is not None and not news_df.empty:
+            # 날짜 기준 LEFT JOIN
+            df = df.merge(
+                news_df[["date", "news_sentiment_avg", "news_count",
+                         "news_positive_ratio", "news_negative_ratio"]],
+                on="date",
+                how="left",
+                suffixes=("_drop", "")
+            )
+
+            # 병합으로 인한 중복 컬럼 처리
+            drop_cols = [c for c in df.columns if c.endswith("_drop")]
+            if drop_cols:
+                df = df.drop(columns=drop_cols)
+
+            # 뉴스 없는 날 0으로 채움
+            news_cols = ["news_sentiment_avg", "news_count",
+                        "news_positive_ratio", "news_negative_ratio"]
+            df[news_cols] = df[news_cols].fillna(0)
+
+            merged_count = (df["news_count"] > 0).sum()
+            print(f"   Merged news features: {merged_count} days with news data")
+
+        return df
+
     def preprocess_stock(self, stock_code: str, save: bool = True) -> pd.DataFrame:
         """특정 종목 전처리"""
         print(f"\n📊 Preprocessing {stock_code}...")
@@ -125,15 +212,19 @@ class DataPreprocessor:
         df = self.create_technical_indicators(df)
         print(f"   Created technical indicators")
 
-        # 3. 타겟 생성
+        # 3. 뉴스 감성 피처 병합
+        df = self.merge_news_features(df, stock_code)
+        print(f"   Merged news sentiment features")
+
+        # 4. 타겟 생성
         df = self.create_target(df, days_ahead=1)
         print(f"   Created target variables")
 
-        # 4. NaN 제거
+        # 5. NaN 제거
         df_clean = df.dropna()
         print(f"   Cleaned data: {len(df_clean)} records (removed {len(df) - len(df_clean)} NaN rows)")
 
-        # 5. 저장
+        # 6. 저장
         if save:
             output_file = self.processed_dir / f"{stock_code}_features.csv"
             df_clean.to_csv(output_file, index=False, encoding="utf-8-sig")

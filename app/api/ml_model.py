@@ -186,10 +186,11 @@ async def activate_model(
         if not model:
             raise HTTPException(status_code=404, detail="모델을 찾을 수 없습니다")
 
-        # 기존 활성 모델 비활성화
+        # 같은 model_type의 기존 활성 모델만 비활성화
         await db.execute(
             update(ModelTrainingHistory)
             .where(ModelTrainingHistory.is_active == True)
+            .where(ModelTrainingHistory.model_type == model.model_type)
             .values(is_active=False)
         )
 

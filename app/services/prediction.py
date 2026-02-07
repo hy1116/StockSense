@@ -1,7 +1,9 @@
-"""주가 예측 서비스"""
+"""주가 예측 서비스 (XGBoost + LSTM 앙상블)"""
 import logging
+import os
 import pickle
 import json
+import tempfile
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -16,22 +18,33 @@ from sqlalchemy.orm import sessionmaker
 
 logger = logging.getLogger(__name__)
 
+# LSTM 윈도우 크기 (daily_train_batch.py와 동일)
+LSTM_WINDOW_SIZE = 20
+
+# 앙상블 가중치
+XGB_WEIGHT = 0.6
+LSTM_WEIGHT = 0.4
+
 
 class PredictionService:
-    """주가 예측 서비스 (ML 모델 + 기술적 지표 기반)"""
+    """주가 예측 서비스 (XGBoost + LSTM 앙상블)"""
 
     def __init__(self, use_ml: bool = True, model_dir: str = "./models", use_db: bool = True):
-        """
-        Args:
-            use_ml: ML 모델 사용 여부 (True: ML 모델, False: 룰 기반)
-            model_dir: 모델 파일 디렉토리 (fallback용)
-            use_db: DB에서 모델 로드 여부 (True: DB 우선, False: 파일만)
-        """
         self.use_ml = use_ml
         self.use_db = use_db
         self.model_dir = Path(model_dir)
-        self.ml_model = None
-        self.ml_scaler = None
+
+        # XGBoost 모델
+        self.xgb_model = None
+        self.xgb_scaler = None
+        self.xgb_info = {}
+
+        # LSTM 모델
+        self.lstm_model = None
+        self.lstm_feature_scaler = None
+        self.lstm_target_scaler = None
+        self.lstm_info = {}
+
         self.feature_columns = []
         self.model_version = None
         self.model_info = {}
@@ -39,86 +52,143 @@ class PredictionService:
         # ML 모델 로드 시도
         if self.use_ml:
             try:
-                # 1. DB에서 활성 모델 로드 시도
                 if self.use_db:
-                    self._load_ml_model_from_db()
+                    self._load_ml_models_from_db()
 
-                # 2. DB 로드 실패 시 파일에서 로드
-                if self.ml_model is None:
+                # DB 로드 실패 시 파일에서 XGBoost 로드
+                if self.xgb_model is None:
                     self._load_ml_model_from_file()
 
-                if self.ml_model is not None:
-                    logger.info(f"✅ ML model loaded successfully (version: {self.model_version})")
+                if self.xgb_model is not None or self.lstm_model is not None:
+                    models_loaded = []
+                    if self.xgb_model is not None:
+                        models_loaded.append("XGBoost")
+                    if self.lstm_model is not None:
+                        models_loaded.append("LSTM")
+                    logger.info(f"ML models loaded: {', '.join(models_loaded)}")
                 else:
                     raise Exception("No model available")
 
             except Exception as e:
-                logger.warning(f"⚠️ Failed to load ML model: {e}. Falling back to rule-based prediction.")
+                logger.warning(f"Failed to load ML model: {e}. Falling back to rule-based prediction.")
                 self.use_ml = False
 
         # 룰 기반 예측용 스케일러
         self.scaler = MinMaxScaler(feature_range=(0, 1))
 
-    def _load_ml_model_from_db(self):
-        """DB에서 활성화된 ML 모델 로드"""
+    def _load_ml_models_from_db(self):
+        """DB에서 model_type별 활성 모델 로드"""
         try:
             from app.config import get_settings
             from app.models.ml_model import ModelTrainingHistory
 
             settings = get_settings()
-            # async URL을 sync URL로 변환
             db_url = settings.database_url.replace("+asyncpg", "")
             engine = create_engine(db_url)
             Session = sessionmaker(bind=engine)
 
             with Session() as session:
-                # 활성 모델 조회
-                result = session.execute(
+                # XGBoost (또는 기존 GBR) 모델 로드
+                xgb_result = session.execute(
                     select(ModelTrainingHistory)
                     .where(ModelTrainingHistory.is_active == True)
+                    .where(ModelTrainingHistory.model_type.in_([
+                        'XGBoostRegressor', 'GradientBoostingRegressor'
+                    ]))
                     .order_by(ModelTrainingHistory.trained_at.desc())
                     .limit(1)
                 )
-                active_model = result.scalar_one_or_none()
+                xgb_record = xgb_result.scalar_one_or_none()
 
-                if active_model is None:
-                    logger.info("📭 No active model found in DB")
-                    return
+                if xgb_record and xgb_record.model_binary and xgb_record.scaler_binary:
+                    self.xgb_model = pickle.loads(xgb_record.model_binary)
+                    self.xgb_scaler = pickle.loads(xgb_record.scaler_binary)
 
-                # 모델 바이너리 역직렬화
-                if active_model.model_binary is None or active_model.scaler_binary is None:
-                    logger.warning("⚠️ Active model has no binary data")
-                    return
+                    if xgb_record.feature_columns:
+                        self.feature_columns = json.loads(xgb_record.feature_columns)
+                    else:
+                        self.feature_columns = self._get_default_feature_columns()
 
-                self.ml_model = pickle.loads(active_model.model_binary)
-                self.ml_scaler = pickle.loads(active_model.scaler_binary)
-
-                # 피처 컬럼 로드
-                if active_model.feature_columns:
-                    self.feature_columns = json.loads(active_model.feature_columns)
+                    self.model_version = xgb_record.model_version
+                    self.xgb_info = {
+                        'id': xgb_record.id,
+                        'model_name': xgb_record.model_name,
+                        'model_type': xgb_record.model_type,
+                        'version': xgb_record.model_version,
+                        'test_score': xgb_record.test_score,
+                    }
+                    self.model_info = {
+                        'id': xgb_record.id,
+                        'model_name': xgb_record.model_name,
+                        'model_type': xgb_record.model_type,
+                        'version': xgb_record.model_version,
+                        'trained_at': xgb_record.trained_at.isoformat() if xgb_record.trained_at else None,
+                        'test_score': xgb_record.test_score,
+                        'mae': xgb_record.mae,
+                        'rmse': xgb_record.rmse,
+                        'train_samples': xgb_record.train_samples
+                    }
+                    logger.info(f"XGBoost loaded from DB: {xgb_record.model_name} "
+                              f"(test_score={xgb_record.test_score:.4f})")
                 else:
-                    self.feature_columns = self._get_default_feature_columns()
+                    logger.info("No active XGBoost/GBR model found in DB")
 
-                # 모델 정보 저장
-                self.model_version = active_model.model_version
-                self.model_info = {
-                    'id': active_model.id,
-                    'model_name': active_model.model_name,
-                    'model_type': active_model.model_type,
-                    'version': active_model.model_version,
-                    'trained_at': active_model.trained_at.isoformat() if active_model.trained_at else None,
-                    'test_score': active_model.test_score,
-                    'mae': active_model.mae,
-                    'rmse': active_model.rmse,
-                    'train_samples': active_model.train_samples
-                }
+                # LSTM 모델 로드
+                lstm_result = session.execute(
+                    select(ModelTrainingHistory)
+                    .where(ModelTrainingHistory.is_active == True)
+                    .where(ModelTrainingHistory.model_type == 'LSTM')
+                    .order_by(ModelTrainingHistory.trained_at.desc())
+                    .limit(1)
+                )
+                lstm_record = lstm_result.scalar_one_or_none()
 
-                logger.info(f"📦 Model loaded from DB: {active_model.model_name} "
-                          f"(version={active_model.model_version}, test_score={active_model.test_score:.4f})")
+                if lstm_record and lstm_record.model_binary and lstm_record.scaler_binary:
+                    self._load_lstm_from_record(lstm_record)
+                else:
+                    logger.info("No active LSTM model found in DB")
 
         except Exception as e:
-            logger.warning(f"⚠️ Failed to load model from DB: {e}")
-            self.ml_model = None
+            logger.warning(f"Failed to load models from DB: {e}")
+
+    def _load_lstm_from_record(self, record):
+        """DB 레코드에서 LSTM 모델 로드"""
+        tmp_path = None
+        try:
+            import keras
+
+            # .keras 바이너리를 임시 파일로 저장 후 로드
+            with tempfile.NamedTemporaryFile(suffix='.keras', delete=False) as tmp:
+                tmp.write(record.model_binary)
+                tmp_path = tmp.name
+
+            self.lstm_model = keras.models.load_model(tmp_path)
+
+            # 스케일러 로드 (dict: feature_scaler, target_scaler)
+            scaler_dict = pickle.loads(record.scaler_binary)
+            self.lstm_feature_scaler = scaler_dict['feature_scaler']
+            self.lstm_target_scaler = scaler_dict['target_scaler']
+
+            # 피처 컬럼이 아직 없으면 LSTM에서 로드
+            if not self.feature_columns and record.feature_columns:
+                self.feature_columns = json.loads(record.feature_columns)
+
+            self.lstm_info = {
+                'id': record.id,
+                'model_name': record.model_name,
+                'model_type': record.model_type,
+                'version': record.model_version,
+                'test_score': record.test_score,
+            }
+            logger.info(f"LSTM loaded from DB: {record.model_name} "
+                      f"(test_score={record.test_score:.4f})")
+
+        except Exception as e:
+            logger.warning(f"Failed to load LSTM model: {e}")
+            self.lstm_model = None
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
     def _get_default_feature_columns(self) -> list:
         """기본 피처 컬럼 반환"""
@@ -127,7 +197,9 @@ class PredictionService:
             'ma5', 'ma10', 'ma20', 'rsi',
             'bb_upper', 'bb_middle', 'bb_lower',
             'macd', 'macd_signal', 'macd_diff',
-            'price_change_1d', 'volume_change'
+            'price_change_1d', 'volume_change',
+            'news_sentiment_avg', 'news_count',
+            'news_positive_ratio', 'news_negative_ratio'
         ]
 
     def _load_ml_model_from_file(self):
@@ -142,11 +214,9 @@ class PredictionService:
         if not scaler_path.exists():
             raise FileNotFoundError(f"Scaler file not found: {scaler_path}")
 
-        # 모델 로드
-        self.ml_model = joblib.load(model_path)
-        self.ml_scaler = joblib.load(scaler_path)
+        self.xgb_model = joblib.load(model_path)
+        self.xgb_scaler = joblib.load(scaler_path)
 
-        # 메타데이터에서 피처 컬럼 정보 로드
         if metadata_path.exists():
             with open(metadata_path, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
@@ -160,37 +230,25 @@ class PredictionService:
                     'test_score': metadata.get('test_score'),
                     'n_samples': metadata.get('n_samples')
                 }
-                logger.info(f"📁 Model loaded from file: {model_path.name} "
-                          f"(version={self.model_version}, test_score={metadata.get('test_score', 'N/A')})")
+                logger.info(f"Model loaded from file: {model_path.name} "
+                          f"(version={self.model_version})")
         else:
-            # 기본 피처 컬럼
             self.feature_columns = self._get_default_feature_columns()
             self.model_version = 'file'
             self.model_info = {'source': 'file'}
-            logger.info(f"📁 Model loaded from file (no metadata): {model_path.name}")
+            logger.info(f"Model loaded from file (no metadata): {model_path.name}")
 
     def predict_price(self, stock_code: str, stock_name: str, chart_data: List[Dict]) -> Dict:
-        """주가 예측
-
-        Args:
-            stock_code: 종목코드
-            stock_name: 종목명
-            chart_data: 차트 데이터 (KIS API에서 받은 output2)
-
-        Returns:
-            예측 결과
-        """
+        """주가 예측"""
         try:
-            logger.info(f"🔮 Prediction start for {stock_code}: chart_data length={len(chart_data) if chart_data else 0}, use_ml={self.use_ml}")
+            logger.info(f"Prediction start for {stock_code}: chart_data length={len(chart_data) if chart_data else 0}, use_ml={self.use_ml}")
 
             if not chart_data or len(chart_data) < 5:
                 logger.warning(f"Insufficient chart data for {stock_code}: len={len(chart_data) if chart_data else 0}")
                 return self._get_default_prediction(stock_code, stock_name)
 
             # 최근 데이터 (KIS API는 최신 데이터가 앞에 있음)
-            recent_data = chart_data[:30]  # 최근 30일
-
-            logger.info(f"First chart item type: {type(recent_data[0])}, keys: {list(recent_data[0].keys()) if isinstance(recent_data[0], dict) else 'not a dict'}")
+            recent_data = chart_data[:30]
 
             # OHLCV 데이터 추출
             close_prices = np.array([int(item.get("stck_clpr", 0)) for item in recent_data])
@@ -199,10 +257,7 @@ class PredictionService:
             low_prices = np.array([int(item.get("stck_lwpr", 0)) for item in recent_data])
             volumes = np.array([int(item.get("acml_vol", 0)) for item in recent_data])
 
-            logger.info(f"Parsed prices for {stock_code}: close_prices[0]={close_prices[0] if len(close_prices) > 0 else 'empty'}, len={len(close_prices)}")
-
             if len(close_prices) == 0 or close_prices[0] == 0:
-                logger.warning(f"Invalid close prices for {stock_code}: len={len(close_prices)}, first={close_prices[0] if len(close_prices) > 0 else 'N/A'}")
                 return self._get_default_prediction(stock_code, stock_name)
 
             current_price = int(close_prices[0])
@@ -212,49 +267,42 @@ class PredictionService:
             ma10 = np.mean(close_prices[:10]) if len(close_prices) >= 10 else current_price
             ma20 = np.mean(close_prices[:20]) if len(close_prices) >= 20 else current_price
 
-            # RSI 계산
             rsi = self._calculate_rsi(close_prices)
-
-            # 볼린저 밴드
             bb_upper, bb_middle, bb_lower = self._calculate_bollinger_bands(close_prices)
-
-            # MACD
             macd, signal = self._calculate_macd(close_prices)
 
-            # 추세 분석
             trend = self._analyze_trend(current_price, ma5, ma10, ma20, rsi)
 
-            # 예측 가격 계산 (ML 또는 룰 기반)
-            if self.use_ml and self.ml_model is not None:
-                predicted_price = self._predict_with_ml(
+            # 예측 가격 계산
+            has_any_model = self.use_ml and (self.xgb_model is not None or self.lstm_model is not None)
+
+            if has_any_model:
+                predicted_price = self._predict_ensemble(
                     current_price, open_prices[0], high_prices[0], low_prices[0], volumes[0],
                     ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
-                    close_prices
+                    close_prices, open_prices, high_prices, low_prices, volumes,
+                    stock_code=stock_code, chart_data=chart_data
                 )
-                logger.info(f"🤖 ML prediction for {stock_code}: {predicted_price:.2f}")
+                logger.info(f"Ensemble prediction for {stock_code}: {predicted_price:.2f}")
             else:
-                # 룰 기반 예측 (기존 로직)
                 predicted_price = self._predict_advanced(
                     current_price, ma5, ma10, ma20, rsi,
                     bb_upper, bb_middle, bb_lower, macd, signal
                 )
-                logger.info(f"📊 Rule-based prediction for {stock_code}: {predicted_price:.2f}")
+                logger.info(f"Rule-based prediction for {stock_code}: {predicted_price:.2f}")
 
-            # 신뢰도 계산 (거래량 + 변동성 기반)
+            # 신뢰도 계산
             confidence = self._calculate_confidence_advanced(
                 volumes, close_prices, current_price, bb_upper, bb_lower
             )
 
-            # ML 모델 사용 시 신뢰도 상향 조정
-            if self.use_ml and self.ml_model is not None:
+            if has_any_model:
                 confidence = min(0.95, confidence + 0.1)
 
-            # 투자의견 생성
             recommendation = self._get_recommendation(
                 current_price, predicted_price, trend, rsi, macd, signal
             )
 
-            # 예측 날짜 (다음 거래일)
             prediction_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
             return {
@@ -272,14 +320,213 @@ class PredictionService:
             logger.error(f"예측 실패: {str(e)}")
             return self._get_default_prediction(stock_code, stock_name)
 
+    def _predict_ensemble(self, current_price, open_price, high_price, low_price, volume,
+                          ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
+                          close_prices, open_prices, high_prices, low_prices, volumes,
+                          stock_code=None, chart_data=None) -> float:
+        """XGBoost + LSTM 앙상블 예측"""
+        xgb_pred = None
+        lstm_pred = None
+
+        # XGBoost 예측
+        if self.xgb_model is not None:
+            xgb_pred = self._predict_with_xgb(
+                current_price, open_price, high_price, low_price, volume,
+                ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
+                close_prices, stock_code=stock_code
+            )
+            logger.info(f"[XGBoost] prediction: {xgb_pred:.2f}")
+
+        # LSTM 예측
+        if self.lstm_model is not None and chart_data is not None:
+            lstm_pred = self._predict_with_lstm(chart_data, stock_code=stock_code)
+            if lstm_pred is not None:
+                logger.info(f"[LSTM] prediction: {lstm_pred:.2f}")
+
+        # 앙상블 결합
+        if xgb_pred is not None and lstm_pred is not None:
+            predicted = XGB_WEIGHT * xgb_pred + LSTM_WEIGHT * lstm_pred
+            logger.info(f"[Ensemble] {XGB_WEIGHT}*XGB + {LSTM_WEIGHT}*LSTM = {predicted:.2f}")
+        elif xgb_pred is not None:
+            predicted = xgb_pred
+        elif lstm_pred is not None:
+            predicted = lstm_pred
+        else:
+            predicted = float(current_price)
+
+        return predicted
+
+    def _predict_with_xgb(self, current_price, open_price, high_price, low_price, volume,
+                          ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
+                          close_prices, stock_code=None) -> float:
+        """XGBoost 모델을 사용한 예측"""
+        try:
+            volume_change = 0.0
+            price_change_1d = 0.0
+
+            if len(close_prices) >= 2:
+                price_change_1d = (close_prices[0] - close_prices[1]) / close_prices[1]
+
+            news_features = self._get_news_sentiment_features(stock_code) if stock_code else {
+                'news_sentiment_avg': 0.0, 'news_count': 0,
+                'news_positive_ratio': 0.0, 'news_negative_ratio': 0.0
+            }
+
+            features_dict = {
+                'open': open_price,
+                'high': high_price,
+                'low': low_price,
+                'close': current_price,
+                'volume': volume,
+                'ma5': ma5,
+                'ma10': ma10,
+                'ma20': ma20,
+                'rsi': rsi,
+                'bb_upper': bb_upper,
+                'bb_middle': bb_middle,
+                'bb_lower': bb_lower,
+                'macd': macd,
+                'macd_signal': signal,
+                'macd_diff': macd - signal,
+                'price_change_1d': price_change_1d,
+                'volume_change': volume_change,
+                **news_features
+            }
+
+            features = [features_dict.get(col, 0) for col in self.feature_columns]
+            X = pd.DataFrame([features], columns=self.feature_columns)
+            X_scaled = self.xgb_scaler.transform(X)
+            predicted = self.xgb_model.predict(X_scaled)[0]
+
+            if predicted <= 0 or predicted > current_price * 2:
+                logger.warning(f"Abnormal XGBoost prediction: {predicted:.2f}, adjusting")
+                predicted = current_price * 1.01
+
+            return float(predicted)
+
+        except Exception as e:
+            logger.error(f"XGBoost prediction failed: {e}")
+            return float(current_price)
+
+    def _predict_with_lstm(self, chart_data: List[Dict], stock_code: str = None) -> Optional[float]:
+        """LSTM 모델을 사용한 예측 (시계열 윈도우)"""
+        try:
+            if len(chart_data) < LSTM_WINDOW_SIZE:
+                logger.warning(f"Insufficient data for LSTM: need {LSTM_WINDOW_SIZE}, got {len(chart_data)}")
+                return None
+
+            # chart_data → 일별 피처 DataFrame (시간순 정렬: 과거→현재)
+            features_df = self._compute_features_timeseries(chart_data, stock_code)
+
+            if features_df is None or len(features_df) < LSTM_WINDOW_SIZE:
+                logger.warning("Could not compute enough timeseries features for LSTM")
+                return None
+
+            # 최근 LSTM_WINDOW_SIZE 일 피처
+            recent_features = features_df.tail(LSTM_WINDOW_SIZE).values
+
+            # 스케일링
+            scaled = self.lstm_feature_scaler.transform(recent_features)
+
+            # (1, window, features) 텐서
+            X_input = scaled.reshape(1, LSTM_WINDOW_SIZE, -1)
+
+            # 예측 (스케일된 값)
+            pred_scaled = self.lstm_model.predict(X_input, verbose=0)[0][0]
+
+            # 역변환
+            predicted = self.lstm_target_scaler.inverse_transform(
+                np.array([[pred_scaled]])
+            )[0][0]
+
+            if predicted <= 0:
+                logger.warning(f"Abnormal LSTM prediction: {predicted:.2f}")
+                return None
+
+            return float(predicted)
+
+        except Exception as e:
+            logger.error(f"LSTM prediction failed: {e}")
+            return None
+
+    def _compute_features_timeseries(self, chart_data: List[Dict], stock_code: str = None) -> Optional[pd.DataFrame]:
+        """chart_data를 일별 피처 DataFrame으로 변환 (시간순)"""
+        try:
+            # chart_data를 DataFrame으로 (최신이 앞에 있으므로 역순 정렬)
+            rows = []
+            for item in reversed(chart_data):
+                rows.append({
+                    'open': int(item.get("stck_oprc", 0)),
+                    'high': int(item.get("stck_hgpr", 0)),
+                    'low': int(item.get("stck_lwpr", 0)),
+                    'close': int(item.get("stck_clpr", 0)),
+                    'volume': int(item.get("acml_vol", 0)),
+                })
+
+            df = pd.DataFrame(rows)
+
+            if len(df) == 0 or df['close'].iloc[0] == 0:
+                return None
+
+            # 기술적 지표 생성 (preprocess_data.py와 동일 로직)
+            df['ma5'] = df['close'].rolling(window=5).mean()
+            df['ma10'] = df['close'].rolling(window=10).mean()
+            df['ma20'] = df['close'].rolling(window=20).mean()
+
+            # RSI
+            delta = df['close'].diff()
+            gain = delta.where(delta > 0, 0).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            df['rsi'] = 100 - (100 / (1 + rs))
+
+            # 볼린저 밴드
+            df['bb_middle'] = df['close'].rolling(window=20).mean()
+            bb_std = df['close'].rolling(window=20).std()
+            df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
+            df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
+
+            # MACD
+            ema12 = df['close'].ewm(span=12, adjust=False).mean()
+            ema26 = df['close'].ewm(span=26, adjust=False).mean()
+            df['macd'] = ema12 - ema26
+            df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+            df['macd_diff'] = df['macd'] - df['macd_signal']
+
+            # 변화율
+            df['price_change_1d'] = df['close'].pct_change()
+            df['volume_change'] = df['volume'].pct_change()
+
+            # 뉴스 감성 피처 (전체 기간 동일값 사용)
+            news_features = self._get_news_sentiment_features(stock_code) if stock_code else {
+                'news_sentiment_avg': 0.0, 'news_count': 0,
+                'news_positive_ratio': 0.0, 'news_negative_ratio': 0.0
+            }
+            for key, val in news_features.items():
+                df[key] = val
+
+            # NaN 제거
+            df = df.dropna()
+
+            # feature_columns 순서로 정렬
+            available = [col for col in self.feature_columns if col in df.columns]
+            if len(available) < len(self.feature_columns):
+                missing = set(self.feature_columns) - set(available)
+                for col in missing:
+                    df[col] = 0
+
+            return df[self.feature_columns]
+
+        except Exception as e:
+            logger.error(f"Failed to compute timeseries features: {e}")
+            return None
+
     def _calculate_rsi(self, prices: np.ndarray, period: int = 14) -> float:
-        """RSI(Relative Strength Index) 계산"""
+        """RSI 계산"""
         if len(prices) < period + 1:
             return 50.0
 
-        # 가격 변화량 계산 (최신 데이터가 앞에 있으므로 역순으로)
         deltas = np.diff(prices[::-1])
-
         gains = np.where(deltas > 0, deltas, 0)
         losses = np.where(deltas < 0, -deltas, 0)
 
@@ -300,9 +547,7 @@ class PredictionService:
             current = float(prices[0]) if len(prices) > 0 else 0
             return current, current, current
 
-        # 최근 period 일 데이터
         recent_prices = prices[:period]
-
         middle = np.mean(recent_prices)
         std = np.std(recent_prices)
 
@@ -316,22 +561,18 @@ class PredictionService:
         if len(prices) < slow:
             return 0.0, 0.0
 
-        # 지수이동평균 계산
-        prices_reversed = prices[::-1]  # 시계열 순서로 변환
+        prices_reversed = prices[::-1]
 
-        # EMA 계산
         ema_fast = self._calculate_ema(prices_reversed, fast)
         ema_slow = self._calculate_ema(prices_reversed, slow)
 
         macd_line = ema_fast - ema_slow
-
-        # Signal line (MACD의 EMA)
-        signal_line = macd_line  # 단순화
+        signal_line = macd_line
 
         return float(macd_line), float(signal_line)
 
     def _calculate_ema(self, prices: np.ndarray, period: int) -> float:
-        """지수이동평균(EMA) 계산"""
+        """EMA 계산"""
         if len(prices) < period:
             return float(np.mean(prices))
 
@@ -346,36 +587,31 @@ class PredictionService:
     def _predict_advanced(self, current: float, ma5: float, ma10: float, ma20: float,
                          rsi: float, bb_upper: float, bb_middle: float, bb_lower: float,
                          macd: float, signal: float) -> float:
-        """고급 예측 (여러 지표 결합)"""
+        """룰 기반 예측 (fallback)"""
         predicted = current
 
-        # 1. 이동평균 기반 예측 (가중치 적용)
         ma_prediction = (ma5 * 0.5 + ma10 * 0.3 + ma20 * 0.2)
 
-        # 2. RSI 기반 조정
-        if rsi > 70:  # 과매수
+        if rsi > 70:
             rsi_factor = -0.02
-        elif rsi < 30:  # 과매도
+        elif rsi < 30:
             rsi_factor = 0.02
         else:
-            rsi_factor = (50 - rsi) / 5000  # 중립 영역
+            rsi_factor = (50 - rsi) / 5000
 
-        # 3. 볼린저 밴드 기반 조정
         bb_position = (current - bb_lower) / (bb_upper - bb_lower) if bb_upper != bb_lower else 0.5
-        if bb_position > 0.8:  # 상단 근처
+        if bb_position > 0.8:
             bb_factor = -0.01
-        elif bb_position < 0.2:  # 하단 근처
+        elif bb_position < 0.2:
             bb_factor = 0.01
         else:
             bb_factor = 0
 
-        # 4. MACD 기반 조정
         if macd > signal:
             macd_factor = 0.01
         else:
             macd_factor = -0.01
 
-        # 종합 예측
         total_factor = 1 + rsi_factor + bb_factor + macd_factor
         predicted = ma_prediction * 0.3 + current * 0.7 * total_factor
 
@@ -383,10 +619,9 @@ class PredictionService:
 
     def _calculate_confidence_advanced(self, volumes: np.ndarray, prices: np.ndarray,
                                       current: float, bb_upper: float, bb_lower: float) -> float:
-        """고급 신뢰도 계산 (거래량 + 변동성)"""
+        """고급 신뢰도 계산"""
         confidence = 0.5
 
-        # 1. 거래량 기반 신뢰도
         if len(volumes) >= 5:
             recent_volume = np.mean(volumes[:5])
             avg_volume = np.mean(volumes)
@@ -398,20 +633,18 @@ class PredictionService:
                 elif volume_ratio > 1.0:
                     confidence += 0.1
 
-        # 2. 변동성 기반 신뢰도
         if len(prices) >= 5:
             volatility = np.std(prices[:5]) / np.mean(prices[:5]) if np.mean(prices[:5]) > 0 else 0
-            if volatility < 0.02:  # 낮은 변동성
+            if volatility < 0.02:
                 confidence += 0.2
             elif volatility < 0.05:
                 confidence += 0.1
             else:
                 confidence -= 0.1
 
-        # 3. 볼린저 밴드 기반 신뢰도
         if bb_upper != bb_lower:
             bb_width = (bb_upper - bb_lower) / current
-            if bb_width < 0.1:  # 좁은 밴드
+            if bb_width < 0.1:
                 confidence += 0.1
 
         return min(0.95, max(0.3, confidence))
@@ -440,7 +673,6 @@ class PredictionService:
         if avg_volume == 0:
             return 0.5
 
-        # 거래량 비율 기반 신뢰도
         volume_ratio = recent_volume / avg_volume
 
         if volume_ratio > 1.5:
@@ -452,13 +684,11 @@ class PredictionService:
 
     def _get_recommendation(self, current: float, predicted: float, trend: str,
                            rsi: float, macd: float, signal: float) -> str:
-        """투자의견 생성 (고급)"""
+        """투자의견 생성"""
         change_rate = ((predicted - current) / current) * 100
 
-        # 기본 점수
         score = 0
 
-        # 1. 가격 변화율 기반
         if change_rate > 3:
             score += 2
         elif change_rate > 1:
@@ -468,7 +698,6 @@ class PredictionService:
         elif change_rate < -1:
             score -= 1
 
-        # 2. 추세 기반
         if trend == "강한 상승":
             score += 2
         elif trend == "상승":
@@ -478,19 +707,16 @@ class PredictionService:
         elif trend == "하락":
             score -= 1
 
-        # 3. RSI 기반
-        if rsi < 30:  # 과매도
+        if rsi < 30:
             score += 1
-        elif rsi > 70:  # 과매수
+        elif rsi > 70:
             score -= 1
 
-        # 4. MACD 기반
         if macd > signal:
             score += 1
         else:
             score -= 1
 
-        # 최종 의견
         if score >= 3:
             return "적극 매수"
         elif score >= 1:
@@ -502,79 +728,54 @@ class PredictionService:
         else:
             return "보유"
 
-    def _predict_with_ml(self, current_price: float, open_price: float, high_price: float,
-                        low_price: float, volume: float, ma5: float, ma10: float, ma20: float,
-                        rsi: float, bb_upper: float, bb_middle: float, bb_lower: float,
-                        macd: float, signal: float, close_prices: np.ndarray) -> float:
-        """ML 모델을 사용한 예측
+    def _get_news_sentiment_features(self, stock_code: str) -> dict:
+        """DB에서 해당 종목의 최근 뉴스 감성 피처 조회"""
+        defaults = {
+            'news_sentiment_avg': 0.0,
+            'news_count': 0,
+            'news_positive_ratio': 0.0,
+            'news_negative_ratio': 0.0
+        }
 
-        Args:
-            current_price: 현재가
-            open_price: 시가
-            high_price: 고가
-            low_price: 저가
-            volume: 거래량
-            ma5, ma10, ma20: 이동평균
-            rsi: RSI
-            bb_upper, bb_middle, bb_lower: 볼린저 밴드
-            macd, signal: MACD
-            close_prices: 종가 배열 (변화율 계산용)
-
-        Returns:
-            예측 가격
-        """
         try:
-            # 거래량 변화율 계산 (간단히 0으로 설정)
-            volume_change = 0.0
-            price_change_1d = 0.0
+            from app.config import get_settings
+            from sqlalchemy import create_engine, text
 
-            # 종가 배열이 있으면 변화율 계산
-            if len(close_prices) >= 2:
-                price_change_1d = (close_prices[0] - close_prices[1]) / close_prices[1]
+            settings = get_settings()
+            db_url = settings.database_url.replace("+asyncpg", "")
+            engine = create_engine(db_url)
 
-            # 피처 준비 (모델 학습 시 사용한 순서와 동일)
-            features_dict = {
-                'open': open_price,
-                'high': high_price,
-                'low': low_price,
-                'close': current_price,
-                'volume': volume,
-                'ma5': ma5,
-                'ma10': ma10,
-                'ma20': ma20,
-                'rsi': rsi,
-                'bb_upper': bb_upper,
-                'bb_middle': bb_middle,
-                'bb_lower': bb_lower,
-                'macd': macd,
-                'macd_signal': signal,
-                'macd_diff': macd - signal,
-                'price_change_1d': price_change_1d,
-                'volume_change': volume_change
-            }
+            query = text("""
+                SELECT
+                    COALESCE(AVG(sentiment_score), 0) as news_sentiment_avg,
+                    COUNT(*) as news_count,
+                    COALESCE(SUM(CASE WHEN sentiment_label = 'positive' THEN 1 ELSE 0 END)::float
+                        / NULLIF(COUNT(*), 0), 0) as news_positive_ratio,
+                    COALESCE(SUM(CASE WHEN sentiment_label = 'negative' THEN 1 ELSE 0 END)::float
+                        / NULLIF(COUNT(*), 0), 0) as news_negative_ratio
+                FROM stock_news
+                WHERE stock_code = :stock_code
+                    AND is_processed = true
+                    AND sentiment_score IS NOT NULL
+                    AND published_at >= CURRENT_DATE
+            """)
 
-            # 모델이 요구하는 피처만 선택
-            features = [features_dict.get(col, 0) for col in self.feature_columns]
+            with engine.connect() as conn:
+                result = conn.execute(query, {"stock_code": stock_code})
+                row = result.fetchone()
 
-            # DataFrame으로 변환 (sklearn은 2D 배열을 요구)
-            X = pd.DataFrame([features], columns=self.feature_columns)
-
-            # 스케일링
-            X_scaled = self.ml_scaler.transform(X)
-
-            # 예측
-            predicted = self.ml_model.predict(X_scaled)[0]
-
-            # 예측값이 비정상적이면 현재가 기준으로 조정
-            if predicted <= 0 or predicted > current_price * 2:
-                logger.warning(f"⚠️ Abnormal ML prediction: {predicted:.2f}, adjusting to current price range")
-                predicted = current_price * 1.01  # 1% 상승으로 조정
-
-            return float(predicted)
+                if row and row[1] > 0:
+                    return {
+                        'news_sentiment_avg': float(row[0]),
+                        'news_count': int(row[1]),
+                        'news_positive_ratio': float(row[2]),
+                        'news_negative_ratio': float(row[3])
+                    }
 
         except Exception as e:
-            logger.error(f"❌ ML prediction failed: {e}, falling back to current price")
-            return float(current_price)
+            logger.warning(f"Failed to get news sentiment features: {e}")
+
+        return defaults
 
     def _get_default_prediction(self, stock_code: str, stock_name: str) -> Dict:
         """기본 예측 결과 (데이터 부족 시)"""
@@ -589,12 +790,12 @@ class PredictionService:
             "recommendation": "보유"
         }
 
-
     def get_model_info(self) -> Dict:
         """현재 로드된 모델 정보 반환"""
         return {
             'use_ml': self.use_ml,
-            'model_loaded': self.ml_model is not None,
+            'xgb_loaded': self.xgb_model is not None,
+            'lstm_loaded': self.lstm_model is not None,
             'model_version': self.model_version,
             'feature_count': len(self.feature_columns),
             **self.model_info

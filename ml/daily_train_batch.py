@@ -4,10 +4,11 @@
 매일 실행하여:
 1. 최신 데이터 수집
 2. 전처리 및 피처 생성
-3. 모델 학습
-4. 성능 평가
-5. DB에 학습 이력 저장
-6. 이전 모델보다 성능 좋으면 활성화
+3. XGBoost 모델 학습
+4. LSTM 모델 학습
+5. 성능 평가
+6. DB에 학습 이력 저장
+7. model_type별 이전 모델보다 성능 좋으면 활성화
 
 Usage:
     python ml/daily_train_batch.py
@@ -15,9 +16,11 @@ Usage:
 """
 import sys
 import os
+import io
 import json
 import pickle
 import time
+import tempfile
 import argparse
 import logging
 from pathlib import Path
@@ -27,14 +30,14 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from xgboost import XGBRegressor
 
 # Windows 콘솔 인코딩 설정
 if sys.platform == "win32":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    import io as _io
+    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # 프로젝트 루트를 Python path에 추가
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -56,9 +59,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# LSTM 윈도우 크기
+LSTM_WINDOW_SIZE = 20
+
 
 class DailyModelTrainer:
-    """일배치 모델 학습기"""
+    """일배치 모델 학습기 (XGBoost + LSTM)"""
 
     def __init__(self, data_dir: str = "./data", model_dir: str = "./models"):
         self.data_dir = Path(data_dir)
@@ -81,17 +87,32 @@ class DailyModelTrainer:
             'ma5', 'ma10', 'ma20', 'rsi',
             'bb_upper', 'bb_middle', 'bb_lower',
             'macd', 'macd_signal', 'macd_diff',
-            'price_change_1d', 'volume_change'
+            'price_change_1d', 'volume_change',
+            'news_sentiment_avg', 'news_count',
+            'news_positive_ratio', 'news_negative_ratio'
         ]
 
-        # 하이퍼파라미터
-        self.hyperparameters = {
-            'n_estimators': 100,
-            'learning_rate': 0.1,
-            'max_depth': 5,
+        # XGBoost 하이퍼파라미터
+        self.xgb_hyperparameters = {
+            'n_estimators': 200,
+            'learning_rate': 0.05,
+            'max_depth': 6,
+            'subsample': 0.8,
+            'colsample_bytree': 0.8,
             'random_state': 42,
-            'min_samples_split': 5,
-            'min_samples_leaf': 2
+            'n_jobs': -1
+        }
+
+        # LSTM 하이퍼파라미터
+        self.lstm_hyperparameters = {
+            'window_size': LSTM_WINDOW_SIZE,
+            'lstm_units_1': 64,
+            'lstm_units_2': 32,
+            'dropout': 0.2,
+            'dense_units': 16,
+            'epochs': 100,
+            'batch_size': 32,
+            'patience': 10
         }
 
     def load_training_data(self) -> Optional[pd.DataFrame]:
@@ -124,8 +145,8 @@ class DailyModelTrainer:
 
         return X, y
 
-    def train_model(self, X: pd.DataFrame, y: pd.Series) -> Dict:
-        """모델 학습 및 평가"""
+    def train_xgboost(self, X: pd.DataFrame, y: pd.Series) -> Dict:
+        """XGBoost 모델 학습 및 평가"""
         start_time = time.time()
 
         # 데이터 분할 (시계열이므로 shuffle=False)
@@ -133,7 +154,7 @@ class DailyModelTrainer:
             X, y, test_size=0.2, shuffle=False
         )
 
-        logger.info(f"데이터 분할: Train={len(X_train)}, Test={len(X_test)}")
+        logger.info(f"[XGBoost] 데이터 분할: Train={len(X_train)}, Test={len(X_test)}")
 
         # 스케일링
         scaler = MinMaxScaler()
@@ -141,8 +162,8 @@ class DailyModelTrainer:
         X_test_scaled = scaler.transform(X_test)
 
         # 모델 학습
-        logger.info("GradientBoostingRegressor 학습 시작...")
-        model = GradientBoostingRegressor(**self.hyperparameters)
+        logger.info("[XGBoost] XGBRegressor 학습 시작...")
+        model = XGBRegressor(**self.xgb_hyperparameters)
         model.fit(X_train_scaled, y_train)
 
         # 예측
@@ -160,12 +181,10 @@ class DailyModelTrainer:
 
         training_duration = time.time() - start_time
 
-        logger.info(f"학습 완료 (소요시간: {training_duration:.2f}초)")
-        logger.info(f"Train R²: {train_score:.4f}")
-        logger.info(f"Test R²: {test_score:.4f}")
-        logger.info(f"MAE: {mae:.2f}")
-        logger.info(f"RMSE: {rmse:.2f}")
-        logger.info(f"MAPE: {mape:.2f}%")
+        logger.info(f"[XGBoost] 학습 완료 (소요시간: {training_duration:.2f}초)")
+        logger.info(f"[XGBoost] Train R²: {train_score:.4f}")
+        logger.info(f"[XGBoost] Test R²: {test_score:.4f}")
+        logger.info(f"[XGBoost] MAE: {mae:.2f}, RMSE: {rmse:.2f}, MAPE: {mape:.2f}%")
 
         return {
             'model': model,
@@ -182,12 +201,155 @@ class DailyModelTrainer:
             'feature_columns': list(X.columns)
         }
 
-    def get_current_active_model(self) -> Optional[ModelTrainingHistory]:
-        """현재 활성화된 모델 조회"""
+    def train_lstm(self, X: pd.DataFrame, y: pd.Series) -> Optional[Dict]:
+        """LSTM 모델 학습 및 평가"""
+        try:
+            import keras
+            from keras import layers, callbacks
+        except ImportError:
+            logger.warning("[LSTM] Keras를 import할 수 없습니다. LSTM 학습을 건너뜁니다.")
+            return None
+
+        start_time = time.time()
+        window_size = self.lstm_hyperparameters['window_size']
+
+        if len(X) < window_size + 50:
+            logger.warning(f"[LSTM] 데이터가 부족합니다 (필요: {window_size + 50}, 현재: {len(X)})")
+            return None
+
+        logger.info(f"[LSTM] LSTM 학습 시작 (window_size={window_size})...")
+
+        # 피처/타겟 스케일링
+        feature_scaler = MinMaxScaler()
+        target_scaler = MinMaxScaler()
+
+        X_scaled = feature_scaler.fit_transform(X)
+        y_scaled = target_scaler.fit_transform(y.values.reshape(-1, 1)).flatten()
+
+        # 슬라이딩 윈도우로 시퀀스 데이터 생성
+        X_seq, y_seq = [], []
+        for i in range(window_size, len(X_scaled)):
+            X_seq.append(X_scaled[i - window_size:i])
+            y_seq.append(y_scaled[i])
+
+        X_seq = np.array(X_seq)
+        y_seq = np.array(y_seq)
+
+        # 시계열 기반 분할 (shuffle=False)
+        split_idx = int(len(X_seq) * 0.8)
+        X_train, X_test = X_seq[:split_idx], X_seq[split_idx:]
+        y_train, y_test = y_seq[:split_idx], y_seq[split_idx:]
+
+        logger.info(f"[LSTM] 데이터 분할: Train={len(X_train)}, Test={len(X_test)}")
+        logger.info(f"[LSTM] 입력 형태: {X_train.shape}")  # (samples, window, features)
+
+        # LSTM 모델 구성
+        model = keras.Sequential([
+            layers.LSTM(
+                self.lstm_hyperparameters['lstm_units_1'],
+                return_sequences=True,
+                input_shape=(window_size, X_train.shape[2])
+            ),
+            layers.Dropout(self.lstm_hyperparameters['dropout']),
+            layers.LSTM(self.lstm_hyperparameters['lstm_units_2']),
+            layers.Dropout(self.lstm_hyperparameters['dropout']),
+            layers.Dense(self.lstm_hyperparameters['dense_units'], activation='relu'),
+            layers.Dense(1)
+        ])
+
+        model.compile(optimizer='adam', loss='mse', metrics=['mae'])
+
+        # 콜백
+        cb = [
+            callbacks.EarlyStopping(
+                monitor='val_loss',
+                patience=self.lstm_hyperparameters['patience'],
+                restore_best_weights=True
+            ),
+            callbacks.ReduceLROnPlateau(
+                monitor='val_loss',
+                factor=0.5,
+                patience=5,
+                min_lr=1e-6
+            )
+        ]
+
+        # 학습
+        history = model.fit(
+            X_train, y_train,
+            validation_data=(X_test, y_test),
+            epochs=self.lstm_hyperparameters['epochs'],
+            batch_size=self.lstm_hyperparameters['batch_size'],
+            callbacks=cb,
+            verbose=1
+        )
+
+        # 예측 및 역변환
+        y_train_pred_scaled = model.predict(X_train, verbose=0).flatten()
+        y_test_pred_scaled = model.predict(X_test, verbose=0).flatten()
+
+        y_train_actual = target_scaler.inverse_transform(y_train.reshape(-1, 1)).flatten()
+        y_test_actual = target_scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
+        y_train_pred = target_scaler.inverse_transform(y_train_pred_scaled.reshape(-1, 1)).flatten()
+        y_test_pred = target_scaler.inverse_transform(y_test_pred_scaled.reshape(-1, 1)).flatten()
+
+        # 성능 평가
+        train_score = r2_score(y_train_actual, y_train_pred)
+        test_score = r2_score(y_test_actual, y_test_pred)
+        mae = mean_absolute_error(y_test_actual, y_test_pred)
+        rmse = np.sqrt(mean_squared_error(y_test_actual, y_test_pred))
+
+        # MAPE
+        non_zero = y_test_actual != 0
+        mape = np.mean(np.abs((y_test_actual[non_zero] - y_test_pred[non_zero]) / y_test_actual[non_zero])) * 100
+
+        training_duration = time.time() - start_time
+
+        logger.info(f"[LSTM] 학습 완료 (소요시간: {training_duration:.2f}초)")
+        logger.info(f"[LSTM] Train R²: {train_score:.4f}")
+        logger.info(f"[LSTM] Test R²: {test_score:.4f}")
+        logger.info(f"[LSTM] MAE: {mae:.2f}, RMSE: {rmse:.2f}, MAPE: {mape:.2f}%")
+
+        # 모델을 BytesIO로 직렬화 (.keras 포맷)
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix='.keras', delete=False) as tmp:
+                tmp_path = tmp.name
+            model.save(tmp_path)
+            with open(tmp_path, 'rb') as f:
+                model_bytes = f.read()
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+        # 스케일러를 dict로 직렬화
+        scaler_dict = {
+            'feature_scaler': feature_scaler,
+            'target_scaler': target_scaler
+        }
+
+        return {
+            'model_bytes': model_bytes,
+            'scaler_dict': scaler_dict,
+            'train_score': train_score,
+            'test_score': test_score,
+            'mae': mae,
+            'rmse': rmse,
+            'mape': mape,
+            'train_samples': len(X_train),
+            'test_samples': len(X_test),
+            'total_samples': len(X),
+            'training_duration': training_duration,
+            'feature_columns': list(X.columns)
+        }
+
+    def get_current_active_model_by_type(self, model_type: str) -> Optional[ModelTrainingHistory]:
+        """특정 model_type의 현재 활성화된 모델 조회"""
         with self.Session() as session:
             result = session.execute(
                 select(ModelTrainingHistory)
                 .where(ModelTrainingHistory.is_active == True)
+                .where(ModelTrainingHistory.model_type == model_type)
                 .order_by(ModelTrainingHistory.trained_at.desc())
                 .limit(1)
             )
@@ -213,30 +375,29 @@ class DailyModelTrainer:
 
             return "v1"
 
-    def save_to_db(self, results: Dict, activate: bool = False) -> ModelTrainingHistory:
-        """학습 결과를 DB에 저장"""
-        # 모델/스케일러를 바이너리로 직렬화
+    def save_xgboost_to_db(self, results: Dict, activate: bool = False) -> ModelTrainingHistory:
+        """XGBoost 학습 결과를 DB에 저장"""
         model_binary = pickle.dumps(results['model'])
         scaler_binary = pickle.dumps(results['scaler'])
 
         version = self.get_next_version()
-        model_name = f"stock_prediction_{version}.pkl"
+        model_name = f"xgboost_{version}.pkl"
 
         with self.Session() as session:
-            # 새 모델 활성화 시 기존 모델 비활성화
+            # model_type별 활성화 (같은 type만 비활성화)
             if activate:
                 session.execute(
                     update(ModelTrainingHistory)
                     .where(ModelTrainingHistory.is_active == True)
+                    .where(ModelTrainingHistory.model_type == 'XGBoostRegressor')
                     .values(is_active=False)
                 )
 
-            # 새 레코드 생성
             history = ModelTrainingHistory(
                 model_name=model_name,
-                model_type="GradientBoostingRegressor",
+                model_type="XGBoostRegressor",
                 model_version=version,
-                hyperparameters=json.dumps(self.hyperparameters),
+                hyperparameters=json.dumps(self.xgb_hyperparameters),
                 feature_columns=json.dumps(results['feature_columns']),
                 scaler_type="MinMaxScaler",
                 train_samples=results['train_samples'],
@@ -252,15 +413,62 @@ class DailyModelTrainer:
                 is_active=activate,
                 trained_by="batch",
                 training_duration_sec=results['training_duration'],
-                notes=f"Daily batch training at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                notes=f"XGBoost batch training at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
             session.add(history)
             session.commit()
             session.refresh(history)
 
-            logger.info(f"DB 저장 완료: ID={history.id}, Version={version}, Active={activate}")
+            logger.info(f"[XGBoost] DB 저장 완료: ID={history.id}, Version={version}, Active={activate}")
+            return history
 
+    def save_lstm_to_db(self, results: Dict, activate: bool = False) -> ModelTrainingHistory:
+        """LSTM 학습 결과를 DB에 저장"""
+        model_binary = results['model_bytes']
+        scaler_binary = pickle.dumps(results['scaler_dict'])
+
+        version = self.get_next_version()
+        model_name = f"lstm_{version}.keras"
+
+        with self.Session() as session:
+            # model_type별 활성화 (같은 type만 비활성화)
+            if activate:
+                session.execute(
+                    update(ModelTrainingHistory)
+                    .where(ModelTrainingHistory.is_active == True)
+                    .where(ModelTrainingHistory.model_type == 'LSTM')
+                    .values(is_active=False)
+                )
+
+            history = ModelTrainingHistory(
+                model_name=model_name,
+                model_type="LSTM",
+                model_version=version,
+                hyperparameters=json.dumps(self.lstm_hyperparameters),
+                feature_columns=json.dumps(results['feature_columns']),
+                scaler_type="MinMaxScaler",
+                train_samples=results['train_samples'],
+                test_samples=results['test_samples'],
+                total_samples=results['total_samples'],
+                train_score=results['train_score'],
+                test_score=results['test_score'],
+                mae=results['mae'],
+                rmse=results['rmse'],
+                mape=results['mape'],
+                model_binary=model_binary,
+                scaler_binary=scaler_binary,
+                is_active=activate,
+                trained_by="batch",
+                training_duration_sec=results['training_duration'],
+                notes=f"LSTM batch training at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+
+            session.add(history)
+            session.commit()
+            session.refresh(history)
+
+            logger.info(f"[LSTM] DB 저장 완료: ID={history.id}, Version={version}, Active={activate}")
             return history
 
     def save_model_files(self, results: Dict, version: str):
@@ -280,7 +488,7 @@ class DailyModelTrainer:
         # 메타데이터 저장
         metadata = {
             'model_name': f"stock_prediction_{version}.pkl",
-            'model_type': 'GradientBoostingRegressor',
+            'model_type': 'XGBoostRegressor',
             'version': version,
             'trained_at': datetime.now().isoformat(),
             'train_score': results['train_score'],
@@ -290,7 +498,7 @@ class DailyModelTrainer:
             'mape': results['mape'],
             'n_samples': results['total_samples'],
             'feature_columns': results['feature_columns'],
-            'hyperparameters': self.hyperparameters
+            'hyperparameters': self.xgb_hyperparameters
         }
 
         with open(metadata_path, 'w', encoding='utf-8') as f:
@@ -298,12 +506,12 @@ class DailyModelTrainer:
 
         logger.info(f"모델 파일 저장: {model_path}")
 
-        # 최신 버전 심볼릭 링크 (또는 복사)
+        # 최신 버전 복사
+        import shutil
         latest_model = self.model_dir / "stock_prediction_v1.pkl"
         latest_scaler = self.model_dir / "scaler.pkl"
         latest_metadata = self.model_dir / "metadata.json"
 
-        import shutil
         shutil.copy(model_path, latest_model)
         shutil.copy(scaler_path, latest_scaler)
         shutil.copy(metadata_path, latest_metadata)
@@ -327,14 +535,14 @@ class DailyModelTrainer:
             return False
 
     def run(self, activate_anyway: bool = False):
-        """전체 배치 실행"""
+        """전체 배치 실행 (XGBoost + LSTM)"""
         logger.info("=" * 60)
-        logger.info("일배치 모델 학습 시작")
+        logger.info("일배치 모델 학습 시작 (XGBoost + LSTM)")
         logger.info(f"시작 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("=" * 60)
 
         try:
-            # 1. 데이터 로드
+            # 1. 데이터 로드 (1회만)
             df = self.load_training_data()
             if df is None:
                 return False
@@ -342,25 +550,45 @@ class DailyModelTrainer:
             # 2. 피처 준비
             X, y = self.prepare_features(df)
 
-            # 3. 모델 학습
-            results = self.train_model(X, y)
+            # === XGBoost 학습 ===
+            logger.info("-" * 40)
+            logger.info("[XGBoost] 학습 시작")
+            logger.info("-" * 40)
 
-            # 4. 활성화 여부 결정
-            current_model = self.get_current_active_model()
-            should_activate = activate_anyway or self.should_activate(results, current_model)
+            xgb_results = self.train_xgboost(X, y)
 
-            # 5. DB에 저장
-            history = self.save_to_db(results, activate=should_activate)
+            # XGBoost 활성화 판단 (model_type별)
+            current_xgb = self.get_current_active_model_by_type('XGBoostRegressor')
+            xgb_activate = activate_anyway or self.should_activate(xgb_results, current_xgb)
+            xgb_history = self.save_xgboost_to_db(xgb_results, activate=xgb_activate)
 
-            # 6. 파일로도 저장 (활성화된 경우만)
-            if should_activate:
-                self.save_model_files(results, history.model_version)
+            if xgb_activate:
+                self.save_model_files(xgb_results, xgb_history.model_version)
 
+            # === LSTM 학습 ===
+            logger.info("-" * 40)
+            logger.info("[LSTM] 학습 시작")
+            logger.info("-" * 40)
+
+            lstm_results = self.train_lstm(X, y)
+
+            lstm_history = None
+            if lstm_results is not None:
+                # LSTM 활성화 판단 (model_type별)
+                current_lstm = self.get_current_active_model_by_type('LSTM')
+                lstm_activate = activate_anyway or self.should_activate(lstm_results, current_lstm)
+                lstm_history = self.save_lstm_to_db(lstm_results, activate=lstm_activate)
+            else:
+                logger.warning("[LSTM] LSTM 학습 건너뜀")
+
+            # === 결과 요약 ===
             logger.info("=" * 60)
             logger.info("일배치 모델 학습 완료")
-            logger.info(f"버전: {history.model_version}")
-            logger.info(f"Test R²: {results['test_score']:.4f}")
-            logger.info(f"활성화: {'Yes' if should_activate else 'No'}")
+            logger.info(f"[XGBoost] Version={xgb_history.model_version}, "
+                       f"Test R²={xgb_results['test_score']:.4f}, Active={xgb_activate}")
+            if lstm_history:
+                logger.info(f"[LSTM] Version={lstm_history.model_version}, "
+                           f"Test R²={lstm_results['test_score']:.4f}, Active={lstm_activate}")
             logger.info("=" * 60)
 
             return True
@@ -371,7 +599,7 @@ class DailyModelTrainer:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="일배치 ML 모델 학습")
+    parser = argparse.ArgumentParser(description="일배치 ML 모델 학습 (XGBoost + LSTM)")
     parser.add_argument(
         '--activate-anyway',
         action='store_true',

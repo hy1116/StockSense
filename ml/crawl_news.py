@@ -17,6 +17,9 @@ Usage:
 
     # 최근 N일 뉴스 (네이버 검색 사용)
     python -m ml.crawl_news --days 7 --use-search
+
+    # Transformer 감성분석 사용
+    python -m ml.crawl_news --use-transformer
 """
 import sys
 import os
@@ -40,7 +43,8 @@ async def crawl_news_for_stocks(
     max_pages: int = 3,
     use_search: bool = False,
     days: int = 7,
-    hours: int = None
+    hours: int = None,
+    use_transformer: bool = False
 ):
     """여러 종목의 뉴스 크롤링
 
@@ -57,8 +61,12 @@ async def crawl_news_for_stocks(
 
     from app.models.stock_news import StockNews
     from app.services.news_crawler import crawl_stock_news, search_stock_news
+    from app.services.news_sentiment import NewsSentimentAnalyzer
 
     load_dotenv()
+
+    # 감성 분석기 초기화
+    sentiment_analyzer = NewsSentimentAnalyzer(use_transformer=use_transformer)
 
     # DB 연결
     db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/stocksense")
@@ -131,6 +139,12 @@ async def crawl_news_for_stocks(
                             duplicate_count += 1
                             continue
 
+                        # 감성 분석 수행
+                        analysis_text = news_item['title']
+                        if news_item.get('content'):
+                            analysis_text += " " + news_item['content']
+                        sentiment_score, sentiment_label = sentiment_analyzer.analyze(analysis_text)
+
                         # 새 뉴스 저장
                         news = StockNews(
                             stock_code=news_item['stock_code'],
@@ -141,6 +155,9 @@ async def crawl_news_for_stocks(
                             content=news_item.get('content'),
                             image_url=news_item.get('image_url'),
                             published_at=news_item.get('published_at'),
+                            sentiment_score=sentiment_score,
+                            sentiment_label=sentiment_label,
+                            is_processed=True,
                         )
                         session.add(news)
                         saved_count += 1
@@ -245,6 +262,8 @@ async def main():
                         help='Days to search (only with --use-search)')
     parser.add_argument('--hours', '-H', type=int, default=1,
                         help='Filter news within last N hours (default: 1, 0=no filter)')
+    parser.add_argument('--use-transformer', action='store_true',
+                        help='Use Transformer model for sentiment analysis (default: keyword-based)')
 
     args = parser.parse_args()
 
@@ -278,7 +297,8 @@ async def main():
         max_pages=args.max_pages,
         use_search=args.use_search,
         days=args.days,
-        hours=hours_filter
+        hours=hours_filter,
+        use_transformer=args.use_transformer
     )
 
     print(f"\n✅ News crawling completed at {datetime.now().isoformat()}")

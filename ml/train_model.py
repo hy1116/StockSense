@@ -6,7 +6,7 @@ import time
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from xgboost import XGBRegressor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import joblib
@@ -72,13 +72,16 @@ class StockPredictionTrainer:
             # DB 레코드 생성
             training_record = ModelTrainingHistory(
                 model_name=metadata.get('model_name', 'stock_prediction'),
-                model_type='GradientBoostingRegressor',
+                model_type='XGBoostRegressor',
                 model_version=version,
                 hyperparameters=json.dumps({
-                    'n_estimators': 100,
-                    'learning_rate': 0.1,
-                    'max_depth': 5,
-                    'random_state': 42
+                    'n_estimators': 200,
+                    'learning_rate': 0.05,
+                    'max_depth': 6,
+                    'subsample': 0.8,
+                    'colsample_bytree': 0.8,
+                    'random_state': 42,
+                    'n_jobs': -1
                 }),
                 feature_columns=json.dumps(metadata.get('feature_columns', [])),
                 scaler_type='MinMaxScaler',
@@ -116,12 +119,13 @@ class StockPredictionTrainer:
             return None
 
     def _activate_model(self, session, model_id: int):
-        """모델 활성화 (기존 활성 모델 비활성화)"""
+        """모델 활성화 (같은 model_type의 기존 활성 모델만 비활성화)"""
         from app.models.ml_model import ModelTrainingHistory
 
-        # 기존 활성 모델 비활성화
+        # 같은 model_type의 기존 활성 모델만 비활성화
         session.query(ModelTrainingHistory).filter(
-            ModelTrainingHistory.is_active == True
+            ModelTrainingHistory.is_active == True,
+            ModelTrainingHistory.model_type == 'XGBoostRegressor'
         ).update({'is_active': False})
 
         # 새 모델 활성화
@@ -145,6 +149,7 @@ class StockPredictionTrainer:
                 result = session.execute(
                     select(ModelTrainingHistory)
                     .where(ModelTrainingHistory.is_active == True)
+                    .where(ModelTrainingHistory.model_type == 'XGBoostRegressor')
                     .limit(1)
                 )
                 current_active = result.scalar_one_or_none()
@@ -235,7 +240,9 @@ class StockPredictionTrainer:
                           'ma5', 'ma10', 'ma20', 'rsi',
                           'bb_upper', 'bb_middle', 'bb_lower',
                           'macd', 'macd_signal', 'macd_diff',
-                          'price_change_1d', 'volume_change']
+                          'price_change_1d', 'volume_change',
+                          'news_sentiment_avg', 'news_count',
+                          'news_positive_ratio', 'news_negative_ratio']
 
         # 데이터에 실제 존재하는 컬럼만 사용
         available_features = [col for col in feature_columns if col in df.columns]
@@ -258,12 +265,15 @@ class StockPredictionTrainer:
         X_test_scaled = self.scaler.transform(X_test)
 
         # 5. 모델 학습
-        print(f"🎯 Training GradientBoostingRegressor...")
-        model = GradientBoostingRegressor(
-            n_estimators=100,
-            learning_rate=0.1,
-            max_depth=5,
-            random_state=42
+        print(f"🎯 Training XGBoostRegressor...")
+        model = XGBRegressor(
+            n_estimators=200,
+            learning_rate=0.05,
+            max_depth=6,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            random_state=42,
+            n_jobs=-1
         )
         model.fit(X_train_scaled, y_train)
         print(f"✅ Training completed!\n")
@@ -309,7 +319,7 @@ class StockPredictionTrainer:
         # 8. 메타데이터 준비
         metadata = {
             'model_name': model_name.replace('.pkl', ''),
-            'model_type': 'GradientBoostingRegressor',
+            'model_type': 'XGBoostRegressor',
             'version': datetime.now().strftime("%Y%m%d_%H%M%S"),
             'stock_code': stock_code,
             'trained_at': datetime.now().isoformat(),

@@ -1,6 +1,6 @@
 """ML 파이프라인 실행 스크립트 (CronJob용)
 
-수집 → 전처리 → 학습 순서로 전체 파이프라인을 실행합니다.
+수집 → 뉴스 크롤링 → 뉴스 감성분석 → 전처리 → 학습 순서로 전체 파이프라인을 실행합니다.
 """
 import sys
 import subprocess
@@ -43,8 +43,9 @@ def main():
     logger.info(f"=== ML Pipeline started at {start.isoformat()} ===")
 
     run_step("1. 일일 데이터 수집", "collect_daily_data.py")
-    run_step("2. 데이터 전처리", "preprocess_data.py")
-    run_step("3. 모델 학습", "train_model.py")
+    run_step("2. 뉴스 크롤링 및 감성분석", "crawl_news.py", ["--hours", "0"])
+    run_step("3. 데이터 전처리", "preprocess_data.py")
+    run_step("4. 모델 학습 (XGBoost + LSTM)", "daily_train_batch.py")
 
     elapsed = datetime.now() - start
     logger.info(f"=== ML Pipeline completed in {elapsed} ===")
