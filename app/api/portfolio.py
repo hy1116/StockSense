@@ -476,6 +476,7 @@ async def get_top_stocks(
 @router.get("/fluctuation-stocks", response_model=TopStocksResponse)
 async def get_fluctuation_stocks(
     limit: int = Query(default=10, ge=1, le=30, description="조회할 종목 수"),
+    sort: int = 0,
     client: KISAPIClient = Depends(get_kis_client)
 ):
     """등락률 상위 종목 조회 (Redis 캐시 10분)"""
@@ -494,7 +495,7 @@ async def get_fluctuation_stocks(
         #             pass
 
         # 2. KIS API 호출 (등락률 순위)
-        result = client.get_fluctuation_ranking(top_n=limit)
+        result = client.get_fluctuation_ranking(top_n=limit, sort_code=sort)
 
         if result.get("rt_cd") != "0":
             raise HTTPException(

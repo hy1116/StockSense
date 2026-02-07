@@ -42,9 +42,15 @@ function Home() {
     refetchInterval: 60000,
   })
   
-  const { data: fluctuationStocksData, isLoading: isLoadingFluctuation } = useQuery({
-    queryKey: ['fluctuationStocks'],
-    queryFn: () => getFluctuationStocks(20),
+  const { data: fluctuationAscStocksData, isLoading: isLoadingFluctuationAsc } = useQuery({
+    queryKey: ['fluctuationStocks', 0],
+    queryFn: () => getFluctuationStocks(20, 0),
+    refetchInterval: 60000,
+  })
+
+  const { data: fluctuationDescStocksData, isLoading: isLoadingFluctuationDesc } = useQuery({
+    queryKey: ['fluctuationStocks', 1],
+    queryFn: () => getFluctuationStocks(20, 1),
     refetchInterval: 60000,
   })
 
@@ -151,13 +157,16 @@ function Home() {
   const stockDataMap = {
     volume: topStocksData?.stocks,
     marketCap: marketCapData?.stocks,
-    fluctuation: fluctuationStocksData?.stocks, // 새로 추가된 등락률 데이터
+    fluctuation_asc: fluctuationAscStocksData?.stocks,
+    fluctuation_desc: fluctuationDescStocksData?.stocks,
+
   };
 
   const loadingStateMap = {
     volume: isLoadingStocks,
     marketCap: isLoadingMarketCap,
-    fluctuation: isLoadingFluctuation, // 새로 추가된 등락률 로딩 상태
+    fluctuation_asc: isLoadingFluctuationAsc,
+    fluctuation_desc: isLoadingFluctuationDesc,
   };
 
   // 2. 현재 활성화된 탭에 맞는 값 추출
@@ -279,10 +288,16 @@ function Home() {
               거래량 상위
             </button>
             <button
-              className={`tab-button ${activeTab === 'fluctuation' ? 'active' : ''}`}
-              onClick={() => handleTabChange('fluctuation')}
+              className={`tab-button ${activeTab === 'fluctuation_asc' ? 'active' : ''}`}
+              onClick={() => handleTabChange('fluctuation_asc')}
             >
-              등락률 상위
+              상승률 상위
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'fluctuation_desc' ? 'active' : ''}`}
+              onClick={() => handleTabChange('fluctuation_desc')}
+            >
+              하락률 상위
             </button>
           </div>
         </div>
@@ -328,8 +343,45 @@ function Home() {
           )
         )}
 
-        {/* 등락률 상위 탭 */}
-        {activeTab === 'fluctuation' && (
+        {/* 상승률 상위 탭 */}
+        {activeTab === 'fluctuation_asc' && (
+          isLoadingCurrentStocks ? (
+            <div className="loading">종목 정보를 불러오는 중...</div>
+          ) : currentStocks ? (
+            <div className="stock-list">
+              <div className="stock-list-header">
+                <span className="col-rank">순위</span>
+                <span className="col-name">종목명</span>
+                <span className="col-price">현재가</span>
+                <span className="col-change">등락률</span>
+              </div>
+              {currentStocks.map((stock) => (
+                <Link
+                  key={stock.stock_code}
+                  to={`/stock/${stock.stock_code}`}
+                  className="stock-list-item"
+                >
+                  <span className="col-rank">
+                    <span className="rank-badge">{stock.rank}</span>
+                  </span>
+                  <span className="col-name">
+                    <span className="stock-name">{stock.stock_name}</span>
+                    <span className="stock-code">{stock.stock_code}</span>
+                  </span>
+                  <span className="col-price">{formatNumber(stock.current_price)}원</span>
+                  <span className={`col-change ${getPriceChangeClass(stock.change_rate)}`}>
+                    {stock.change_rate > 0 ? '+' : ''}{stock.change_rate.toFixed(2)}%
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="error">종목 정보를 불러올 수 없습니다</div>
+          )
+        )}
+
+        {/* 하락률 상위 탭 */}
+        {activeTab === 'fluctuation_desc' && (
           isLoadingCurrentStocks ? (
             <div className="loading">종목 정보를 불러오는 중...</div>
           ) : currentStocks ? (

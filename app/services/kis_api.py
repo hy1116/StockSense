@@ -368,7 +368,7 @@ class KISAPIClient:
         else:
             raise Exception(f"시가총액 순위 조회 실패: {response.text}")
     
-    def get_fluctuation_ranking(self, top_n: int = 30) -> Dict:
+    def get_fluctuation_ranking(self, top_n: int = 30, sort_code: int = 0) -> Dict:
         """등락률 순위 조회
 
         Args:
@@ -386,7 +386,7 @@ class KISAPIClient:
             "fid_cond_mrkt_div_code": "J",  # 조건 시장 분류 코드
             "fid_cond_scr_div_code": "20170",  # 조건 화면 분류 코드
             "fid_input_iscd": "0000",  # 입력 종목코드
-            "fid_rank_sort_cls_code": "0",  # 순위 정렬 구분 코드 (0: 상승율순)
+            "fid_rank_sort_cls_code": sort_code,  # 순위 정렬 구분 코드 (0: 상승율순)
             "fid_input_cnt_1": "0",  # 입력 수1
             "fid_prc_cls_code": "1",  # 가격 구분 코드
             "fid_input_price_1": "",  # 입력 가격1

@@ -110,9 +110,9 @@ export const getMarketCapStocks = async (limit = 10) => {
   return response.data
 }
 
-export const getFluctuationStocks = async (limit = 10) => {
+export const getFluctuationStocks = async (limit = 10, sort = 0) => {
   const response = await api.get('/api/portfolio/fluctuation-stocks', {
-    params: { limit }
+    params: { limit, sort }
   })
   return response.data
 }

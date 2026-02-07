@@ -671,7 +671,7 @@ function StockDetail() {
               </div>
             </div>
             <p className="sd-pred-disclaimer">
-              * 이 예측은 단순 이동평균 기반 분석이며, 투자 권유가 아닙니다.
+              * 이 예측은 XGBoost + LSTM 앙상블 모델과 뉴스 감성 분석을 활용한 AI 분석이며, 투자 권유가 아닙니다.
             </p>
           </div>
         </section>
