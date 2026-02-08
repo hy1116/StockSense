@@ -84,6 +84,16 @@ class ChartData(BaseModel):
     volume: int = Field(..., description="거래량")
 
 
+class MinuteChartData(BaseModel):
+    """분봉 차트 데이터"""
+    time: str = Field(..., description="시간 (HH:MM)")
+    open: int = Field(..., description="시가")
+    high: int = Field(..., description="고가")
+    low: int = Field(..., description="저가")
+    close: int = Field(..., description="종가")
+    volume: int = Field(..., description="거래량")
+
+
 class StockBasicInfo(BaseModel):
     """종목 기본 정보"""
     stock_code: str = Field(..., description="종목코드")

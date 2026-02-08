@@ -35,6 +35,8 @@ else:
     engine_kwargs["pool_pre_ping"] = True
     engine_kwargs["pool_size"] = 5
     engine_kwargs["max_overflow"] = 10
+    engine_kwargs["pool_timeout"] = 30
+    engine_kwargs["pool_recycle"] = 1800  # 30분마다 커넥션 재생성
 
 engine = create_async_engine(settings.database_url, **engine_kwargs)
 

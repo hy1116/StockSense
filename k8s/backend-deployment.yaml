@@ -5,6 +5,11 @@ metadata:
   namespace: stocksense
 spec:
   replicas: 2
+  strategy: # 1. 배포 전략 최적화
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: backend
@@ -13,9 +18,14 @@ spec:
       labels:
         app: backend
     spec:
+      terminationGracePeriodSeconds: 30
       containers:
       - name: backend
         image: stocksense-backend:latest  # Docker 이미지를 빌드하고 레지스트리에 푸시한 후 여기에 이미지 경로를 입력하세요
+        lifecycle: # 2. Graceful Shutdown 설정
+          preStop:
+            exec:
+              command: ["sh", "-c", "sleep 10"]
         imagePullPolicy: Never
         ports:
         - containerPort: 8000

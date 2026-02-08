@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { getStockDetail, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock } from '../services/api'
+import { getStockDetail, getStockIntraday, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock } from '../services/api'
 import { createChart } from 'lightweight-charts'
 import './StockDetail.css'
 
@@ -13,7 +13,8 @@ function StockDetail() {
   const [stockData, setStockData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [period, setPeriod] = useState('D')
+  const [period, setPeriod] = useState('3M')
+  const [intradayData, setIntradayData] = useState(null)
 
   // 댓글 관련 state
   const [comments, setComments] = useState([])
@@ -36,7 +37,7 @@ function StockDetail() {
   // 주문 관련 state
   const [tradeTab, setTradeTab] = useState('buy')
   const [orderForm, setOrderForm] = useState({
-    quantity: '',
+    quantity: '1',
     price: '',
     orderType: '00'
   })
@@ -48,8 +49,9 @@ function StockDetail() {
       alert('매수 주문이 접수되었습니다')
       setOrderForm(prev => ({ ...prev, quantity: '' }))
     },
-    onError: (error) => {
+    onError: (error, response) => {
       alert(`매수 실패: ${error.message}`)
+      alert(`매수 실패: ${response.detail}`)
     }
   })
 
@@ -95,7 +97,7 @@ function StockDetail() {
     setError(null)
 
     try {
-      const data = await getStockDetail(symbol, period)
+      const data = await getStockDetail(symbol)
       setStockData(data)
     } catch (err) {
       setError(err.response?.data?.detail || '데이터를 불러오는데 실패했습니다')
@@ -290,8 +292,13 @@ function StockDetail() {
   const initChart = useCallback(() => {
     if (!chartContainerRef.current || !stockData) return
 
+    const isIntraday = period === '1D'
+
+    // 분봉 모드인데 데이터 없으면 스킵
+    if (isIntraday && (!intradayData || intradayData.length === 0)) return
+
     const chartData = stockData.chart_data
-    if (!chartData || chartData.length === 0) return
+    if (!isIntraday && (!chartData || chartData.length === 0)) return
 
     // 기존 차트 제거
     if (chartInstanceRef.current) {
@@ -301,10 +308,13 @@ function StockDetail() {
       volumeSeriesRef.current = null
     }
 
-    const sortedData = [...chartData].reverse()
+    // 기간별 바 간격 계산 (차트 너비에 맞게 캔들을 고르게 배치)
+    const containerWidth = chartContainerRef.current.clientWidth
+    const visibleBarCount = isIntraday ? 390 : ({ '1W': 5, '1M': 22, '3M': 65, '1Y': 250 }[period] || 65)
+    const calcBarSpacing = Math.max(4, Math.min(60, (containerWidth - 80) / (visibleBarCount + 2)))
 
     const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
+      width: containerWidth,
       height: 400,
       layout: {
         background: { color: 'transparent' },
@@ -326,11 +336,13 @@ function StockDetail() {
       },
       timeScale: {
         borderVisible: false,
-        timeVisible: true,
+        timeVisible: isIntraday,
         secondsVisible: false,
         rightOffset: 2,
-        barSpacing: 10,
+        barSpacing: calcBarSpacing,
         minBarSpacing: 3,
+        fixLeftEdge: visibleBarCount <= 22,
+        fixRightEdge: true,
       },
     })
 
@@ -359,39 +371,83 @@ function StockDetail() {
 
     volumeSeriesRef.current = volumeSeries
 
-    let candleData = []
-    let volumeData = []
-    const seenTimes = new Set()
+    let candleResult = []
+    let volumeResult = []
 
-    sortedData.forEach(d => {
-      if (!d.date || d.date.length < 8) return
+    if (isIntraday) {
+      // 분봉 모드: 시간 기반 (HH:MM → Unix timestamp)
+      const today = new Date()
+      const yyyy = today.getFullYear()
+      const mm = today.getMonth()
+      const dd = today.getDate()
 
-      const time = `${d.date.slice(0, 4)}-${d.date.slice(4, 6)}-${d.date.slice(6, 8)}`
+      intradayData.forEach(d => {
+        if (!d.time) return
+        const [hh, mi] = d.time.split(':').map(Number)
+        const ts = Math.floor(new Date(yyyy, mm, dd, hh, mi, 0).getTime() / 1000)
 
-      if (seenTimes.has(time)) return
-      seenTimes.add(time)
+        if (d.open > 0 && d.high > 0 && d.low > 0 && d.close > 0) {
+          candleResult.push({
+            time: ts,
+            open: d.open,
+            high: d.high,
+            low: d.low,
+            close: d.close,
+          })
+          volumeResult.push({
+            time: ts,
+            value: d.volume || 0,
+            color: d.close >= d.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
+          })
+        }
+      })
+    } else {
+      // 일봉 모드: 날짜 기반
+      const sortedData = [...chartData].reverse()
+      const seenTimes = new Set()
 
-      if (d.open > 0 && d.high > 0 && d.low > 0 && d.close > 0) {
-        candleData.push({
-          time: time,
-          open: d.open,
-          high: d.high,
-          low: d.low,
-          close: d.close,
+      sortedData.forEach(d => {
+        if (!d.date || d.date.length < 8) return
+        const time = `${d.date.slice(0, 4)}-${d.date.slice(4, 6)}-${d.date.slice(6, 8)}`
+        if (seenTimes.has(time)) return
+        seenTimes.add(time)
+
+        if (d.open > 0 && d.high > 0 && d.low > 0 && d.close > 0) {
+          candleResult.push({ time, open: d.open, high: d.high, low: d.low, close: d.close })
+          volumeResult.push({
+            time,
+            value: d.volume || 0,
+            color: d.close >= d.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
+          })
+        }
+      })
+    }
+
+    candleSeries.setData(candleResult)
+    volumeSeries.setData(volumeResult)
+
+    if (isIntraday) {
+      chart.timeScale().fitContent()
+    } else {
+      // period별 표시 범위 (거래일 기준)
+      const visibleMap = { '1W': 5, '1M': 22, '3M': 65, '1Y': 250 }
+      const visibleBars = visibleMap[period] || 65
+      const totalBars = candleResult.length
+      if (visibleBars <= 22) {
+        // 1주, 1개월: fitContent로 전체 너비에 고르게 배치
+        chart.timeScale().setVisibleLogicalRange({
+          from: totalBars - visibleBars - 1,
+          to: totalBars + 1,
         })
-
-        volumeData.push({
-          time: time,
-          value: d.volume || 0,
-          color: d.close >= d.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
+      } else if (totalBars > visibleBars) {
+        chart.timeScale().setVisibleLogicalRange({
+          from: totalBars - visibleBars,
+          to: totalBars,
         })
+      } else {
+        chart.timeScale().fitContent()
       }
-    })
-
-    candleSeries.setData(candleData)
-    volumeSeries.setData(volumeData)
-
-    chart.timeScale().fitContent()
+    }
 
     const handleResize = () => {
       if (chartContainerRef.current && chartInstanceRef.current) {
@@ -415,7 +471,7 @@ function StockDetail() {
         volumeSeriesRef.current = null
       }
     }
-  }, [stockData, period])
+  }, [stockData, period, intradayData])
 
   // 차트 초기화
   useEffect(() => {
@@ -449,7 +505,7 @@ function StockDetail() {
         clearInterval(autoRefreshIntervalRef.current)
       }
     }
-  }, [symbol, period])
+  }, [symbol])
 
   // 뉴스 및 댓글 로드
   useEffect(() => {
@@ -557,14 +613,27 @@ function StockDetail() {
           <h2>차트</h2>
           <div className="sd-period-selector">
             {[
-              { key: 'D', label: '일' },
-              { key: 'W', label: '주' },
-              { key: 'M', label: '월' },
+              { key: '1D', label: '1일' },
+              { key: '1W', label: '1주' },
+              { key: '1M', label: '1개월' },
+              { key: '3M', label: '3개월' },
+              { key: '1Y', label: '1년' },
             ].map(p => (
               <button
                 key={p.key}
                 className={period === p.key ? 'active' : ''}
-                onClick={() => setPeriod(p.key)}
+                onClick={async () => {
+                  setPeriod(p.key)
+                  if (p.key === '1D' && symbol) {
+                    try {
+                      const data = await getStockIntraday(symbol)
+                      setIntradayData(data)
+                    } catch (err) {
+                      console.error('분봉 데이터 조회 실패:', err)
+                      setIntradayData([])
+                    }
+                  }
+                }}
               >
                 {p.label}
               </button>
@@ -699,13 +768,22 @@ function StockDetail() {
             <form className="sd-trade-form" onSubmit={handleOrder}>
               <div className="sd-trade-group">
                 <label>주문유형</label>
-                <select
-                  value={orderForm.orderType}
-                  onChange={(e) => setOrderForm({ ...orderForm, orderType: e.target.value })}
-                >
-                  <option value="00">지정가</option>
-                  <option value="01">시장가</option>
-                </select>
+                <div className="sd-order-type-tabs">
+                  <button
+                    type="button"
+                    className={`sd-order-type-tab ${orderForm.orderType === '00' ? 'active' : ''}`}
+                    onClick={() => setOrderForm({ ...orderForm, orderType: '00' })}
+                  >
+                    지정가
+                  </button>
+                  <button
+                    type="button"
+                    className={`sd-order-type-tab ${orderForm.orderType === '01' ? 'active' : ''}`}
+                    onClick={() => setOrderForm({ ...orderForm, orderType: '01', price: '' })}
+                  >
+                    시장가
+                  </button>
+                </div>
               </div>
               <div className="sd-trade-group">
                 <label>가격</label>
@@ -720,14 +798,30 @@ function StockDetail() {
               </div>
               <div className="sd-trade-group">
                 <label>수량</label>
-                <input
-                  type="number"
-                  value={orderForm.quantity}
-                  onChange={(e) => setOrderForm({ ...orderForm, quantity: e.target.value })}
-                  placeholder="주문 수량"
-                  min="1"
-                  required
-                />
+                <div className="sd-quantity-control">
+                  <button
+                    type="button"
+                    className="sd-qty-btn"
+                    onClick={() => setOrderForm({ ...orderForm, quantity: String(Math.max(1, (parseInt(orderForm.quantity) || 1) - 1)) })}
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    value={orderForm.quantity}
+                    onChange={(e) => setOrderForm({ ...orderForm, quantity: e.target.value })}
+                    placeholder="주문 수량"
+                    min="1"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="sd-qty-btn"
+                    onClick={() => setOrderForm({ ...orderForm, quantity: String((parseInt(orderForm.quantity) || 0) + 1) })}
+                  >
+                    +
+                  </button>
+                </div>
               </div>
               {orderForm.quantity && orderForm.price && orderForm.orderType !== '01' && (
                 <div className="sd-trade-total">

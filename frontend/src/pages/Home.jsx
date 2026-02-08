@@ -34,24 +34,28 @@ function Home() {
     queryKey: ['topStocks'],
     queryFn: () => getTopStocks(20),
     refetchInterval: 60000,
+    enabled: activeTab === 'volume',
   })
 
   const { data: marketCapData, isLoading: isLoadingMarketCap } = useQuery({
     queryKey: ['marketCapStocks'],
     queryFn: () => getMarketCapStocks(20),
     refetchInterval: 60000,
+    enabled: activeTab === 'marketCap',
   })
-  
+
   const { data: fluctuationAscStocksData, isLoading: isLoadingFluctuationAsc } = useQuery({
     queryKey: ['fluctuationStocks', 0],
     queryFn: () => getFluctuationStocks(20, 0),
     refetchInterval: 60000,
+    enabled: activeTab === 'fluctuation_asc',
   })
 
   const { data: fluctuationDescStocksData, isLoading: isLoadingFluctuationDesc } = useQuery({
     queryKey: ['fluctuationStocks', 1],
     queryFn: () => getFluctuationStocks(20, 1),
     refetchInterval: 60000,
+    enabled: activeTab === 'fluctuation_desc',
   })
 
   // WebSocket 실시간 잔고

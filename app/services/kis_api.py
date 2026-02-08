@@ -3,6 +3,8 @@
 KIS (Korea Investment & Securities) API wrapper
 """
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import json
 import logging
 from datetime import datetime, timedelta
@@ -42,6 +44,19 @@ class KISAPIClient:
         # 메모리 캐시 (fallback)
         self._access_token = None
         self._token_expiry = None
+
+        # HTTP 세션 (timeout + retry)
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=2,
+            backoff_factor=0.5,
+            status_forcelist=[500, 502, 503, 504],
+            allowed_methods=["GET", "POST"],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
+        self._default_timeout = 15
 
     def _log_request(self, method: str, url: str, headers: Dict, params: Dict = None, data: Dict = None):
         """KIS API 요청 로깅"""
@@ -101,7 +116,7 @@ class KISAPIClient:
 
         try:
             self._log_request("POST", url, headers, data=data)
-            response = requests.post(url, headers=headers, json=data, timeout=10)
+            response = self.session.post(url, headers=headers, json=data, timeout=10)
 
             result = response.json() if response.status_code == 200 else {"error": response.text}
             self._log_response("POST", url, response.status_code, result)
@@ -151,7 +166,7 @@ class KISAPIClient:
         }
 
         self._log_request("GET", url, headers, params=params)
-        response = requests.get(url, headers=headers, params=params)
+        response = self.session.get(url, headers=headers, params=params, timeout=self._default_timeout)
 
         result = response.json() if response.status_code == 200 else {"error": response.text}
         self._log_response("GET", url, response.status_code, result)
@@ -173,7 +188,7 @@ class KISAPIClient:
         }
 
         self._log_request("GET", url, headers, params=params)
-        response = requests.get(url, headers=headers, params=params)
+        response = self.session.get(url, headers=headers, params=params, timeout=self._default_timeout)
 
         result = response.json() if response.status_code == 200 else {"error": response.text}
         self._log_response("GET", url, response.status_code, result)
@@ -212,7 +227,7 @@ class KISAPIClient:
         }
 
         self._log_request("POST", url, headers, data=data)
-        response = requests.post(url, headers=headers, json=data)
+        response = self.session.post(url, headers=headers, json=data, timeout=self._default_timeout)
 
         result = response.json() if response.status_code == 200 else {"error": response.text}
         self._log_response("POST", url, response.status_code, result)
@@ -251,7 +266,7 @@ class KISAPIClient:
         }
 
         self._log_request("POST", url, headers, data=data)
-        response = requests.post(url, headers=headers, json=data)
+        response = self.session.post(url, headers=headers, json=data, timeout=self._default_timeout)
 
         result = response.json() if response.status_code == 200 else {"error": response.text}
         self._log_response("POST", url, response.status_code, result)
@@ -269,21 +284,32 @@ class KISAPIClient:
             period: 기간 구분 (D: 일, W: 주, M: 월)
             count: 조회 개수 (최대 100)
         """
+        from datetime import datetime, timedelta
+
         tr_id = "FHKST03010100"
         url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
+
+        end_date = datetime.now().strftime("%Y%m%d")
+        # period에 따라 조회 기간 조정
+        if period == "D":
+            start_date = (datetime.now() - timedelta(days=200)).strftime("%Y%m%d")
+        elif period == "W":
+            start_date = (datetime.now() - timedelta(days=730)).strftime("%Y%m%d")
+        else:  # M
+            start_date = (datetime.now() - timedelta(days=1825)).strftime("%Y%m%d")
 
         headers = self._get_headers(tr_id)
         params = {
             "FID_COND_MRKT_DIV_CODE": "J",
             "FID_INPUT_ISCD": stock_code,
-            "FID_INPUT_DATE_1": "",
-            "FID_INPUT_DATE_2": "",
+            "FID_INPUT_DATE_1": start_date,
+            "FID_INPUT_DATE_2": end_date,
             "FID_PERIOD_DIV_CODE": period,
             "FID_ORG_ADJ_PRC": "0"
         }
 
         self._log_request("GET", url, headers, params=params)
-        response = requests.get(url, headers=headers, params=params)
+        response = self.session.get(url, headers=headers, params=params, timeout=self._default_timeout)
 
         result = response.json() if response.status_code == 200 else {"error": response.text}
         self._log_response("GET", url, response.status_code, result)
@@ -292,6 +318,38 @@ class KISAPIClient:
             return result
         else:
             raise Exception(f"차트 데이터 조회 실패: {response.text}")
+
+    def get_minute_chart(self, stock_code: str) -> Dict:
+        """주식 당일 분봉 조회
+
+        Args:
+            stock_code: 종목코드 (6자리)
+
+        Returns:
+            당일 분봉 데이터 (1분 단위)
+        """
+        tr_id = "FHKST03010200"
+        url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+
+        headers = self._get_headers(tr_id)
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": stock_code,
+            "FID_INPUT_HOUR_1": "153000",
+            "FID_PW_DATA_INCU_YN": "Y",
+            "FID_ETC_CLS_CODE": ""
+        }
+
+        self._log_request("GET", url, headers, params=params)
+        response = self.session.get(url, headers=headers, params=params, timeout=self._default_timeout)
+
+        result = response.json() if response.status_code == 200 else {"error": response.text}
+        self._log_response("GET", url, response.status_code, result)
+
+        if response.status_code == 200:
+            return result
+        else:
+            raise Exception(f"분봉 데이터 조회 실패: {response.text}")
 
     def get_volume_ranking(self) -> Dict:
         """거래량 순위 조회
@@ -318,7 +376,7 @@ class KISAPIClient:
         }
 
         self._log_request("GET", url, headers, params=params)
-        response = requests.get(url, headers=headers, params=params)
+        response = self.session.get(url, headers=headers, params=params, timeout=self._default_timeout)
 
         result = response.json() if response.status_code == 200 else {"error": response.text}
         self._log_response("GET", url, response.status_code, result)
@@ -355,7 +413,7 @@ class KISAPIClient:
         }
 
         self._log_request("GET", url, headers, params=params)
-        response = requests.get(url, headers=headers, params=params)
+        response = self.session.get(url, headers=headers, params=params, timeout=self._default_timeout)
 
         result = response.json() if response.status_code == 200 else {"error": response.text}
         self._log_response("GET", url, response.status_code, result)
@@ -399,7 +457,7 @@ class KISAPIClient:
         }
 
         self._log_request("GET", url, headers, params=params)
-        response = requests.get(url, headers=headers, params=params)
+        response = self.session.get(url, headers=headers, params=params, timeout=self._default_timeout)
 
         result = response.json() if response.status_code == 200 else {"error": response.text}
         self._log_response("GET", url, response.status_code, result)
@@ -436,7 +494,7 @@ class KISAPIClient:
         }
 
         self._log_request("GET", url, headers, params=params)
-        response = requests.get(url, headers=headers, params=params)
+        response = self.session.get(url, headers=headers, params=params, timeout=self._default_timeout)
 
         result = response.json() if response.status_code == 200 else {"error": response.text}
         self._log_response("GET", url, response.status_code, result)

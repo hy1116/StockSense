@@ -183,10 +183,13 @@ export const getPrediction = async (stockCode) => {
 
 // ===== Stock Detail API =====
 
-export const getStockDetail = async (symbol, period = 'D') => {
-  const response = await api.get(`/api/portfolio/stock/${symbol}/detail`, {
-    params: { period }
-  })
+export const getStockDetail = async (symbol) => {
+  const response = await api.get(`/api/portfolio/stock/${symbol}/detail`)
+  return response.data
+}
+
+export const getStockIntraday = async (symbol) => {
+  const response = await api.get(`/api/portfolio/stock/${symbol}/intraday`)
   return response.data
 }
 

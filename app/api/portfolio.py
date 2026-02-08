@@ -17,6 +17,7 @@ from app.schemas.portfolio import (
     StockDetailInfo,
     StockBasicInfo,
     ChartData,
+    MinuteChartData,
     PredictionResult,
     TopStock,
     TopStocksResponse,
@@ -211,13 +212,13 @@ async def get_stock_detail(
             hts_avls=float(price_output.get("hts_avls", 0)) if price_output.get("hts_avls") else None
         )
         
-        # 2. 차트 데이터 조회
-        chart_result = client.get_daily_chart(stock_code, period=period, count=100)
+        # 2. 차트 데이터 조회 (항상 일봉, 표시 범위는 프론트에서 제어)
+        chart_result = client.get_daily_chart(stock_code, period="D", count=100)
         chart_data = []
 
         if chart_result.get("rt_cd") == "0":
             output2 = chart_result.get("output2", [])
-            for item in output2[:30]:  # 최근 30개 데이터
+            for item in output2:  # 전체 차트 데이터
                 chart_data.append(ChartData(
                     date=item.get("stck_bsop_date", ""),
                     open=int(item.get("stck_oprc", 0)),
@@ -253,6 +254,54 @@ async def get_stock_detail(
         return detail_info
 
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stock/{stock_code}/intraday", response_model=list[MinuteChartData])
+async def get_stock_intraday(
+    stock_code: str,
+    client: KISAPIClient = Depends(get_kis_client)
+):
+    """종목 당일 분봉 데이터 조회"""
+    try:
+        result = client.get_minute_chart(stock_code)
+        if result.get("rt_cd") != "0":
+            raise HTTPException(
+                status_code=400,
+                detail=f"분봉 조회 실패: {result.get('msg1', 'Unknown error')}"
+            )
+
+        output2 = result.get("output2", [])
+        chart_data = []
+        seen_times = set()
+
+        for item in output2:
+            raw_time = item.get("stck_cntg_hour", "")
+            if not raw_time or len(raw_time) < 4:
+                continue
+
+            time_str = f"{raw_time[:2]}:{raw_time[2:4]}"
+            if time_str in seen_times:
+                continue
+            seen_times.add(time_str)
+
+            chart_data.append(MinuteChartData(
+                time=time_str,
+                open=int(item.get("stck_oprc", 0)),
+                high=int(item.get("stck_hgpr", 0)),
+                low=int(item.get("stck_lwpr", 0)),
+                close=int(item.get("stck_prpr", 0)),
+                volume=int(item.get("cntg_vol", 0)),
+            ))
+
+        # 시간순 정렬 (API는 역순)
+        chart_data.sort(key=lambda x: x.time)
+        return chart_data
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"분봉 조회 실패: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

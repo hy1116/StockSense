@@ -13,10 +13,31 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 import joblib
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 
 logger = logging.getLogger(__name__)
+
+# Sync DB 엔진 싱글턴 (매 요청마다 생성 방지)
+_sync_engine = None
+_sync_session_factory = None
+
+def _get_sync_db():
+    """Sync DB 엔진/세션 싱글턴 반환"""
+    global _sync_engine, _sync_session_factory
+    if _sync_engine is None:
+        from app.config import get_settings
+        settings = get_settings()
+        db_url = settings.database_url.replace("+asyncpg", "")
+        _sync_engine = create_engine(
+            db_url,
+            pool_size=3,
+            max_overflow=5,
+            pool_pre_ping=True,
+            pool_recycle=1800,
+        )
+        _sync_session_factory = sessionmaker(bind=_sync_engine)
+    return _sync_engine, _sync_session_factory
 
 # LSTM 윈도우 크기 (daily_train_batch.py와 동일)
 LSTM_WINDOW_SIZE = 20
@@ -79,13 +100,9 @@ class PredictionService:
     def _load_ml_models_from_db(self):
         """DB에서 model_type별 활성 모델 로드"""
         try:
-            from app.config import get_settings
             from app.models.ml_model import ModelTrainingHistory
 
-            settings = get_settings()
-            db_url = settings.database_url.replace("+asyncpg", "")
-            engine = create_engine(db_url)
-            Session = sessionmaker(bind=engine)
+            engine, Session = _get_sync_db()
 
             with Session() as session:
                 # XGBoost (또는 기존 GBR) 모델 로드
@@ -297,10 +314,11 @@ class PredictionService:
             )
 
             if has_any_model:
-                confidence = min(0.95, confidence + 0.1)
+                confidence = min(0.80, confidence + 0.05)
 
             recommendation = self._get_recommendation(
-                current_price, predicted_price, trend, rsi, macd, signal
+                current_price, predicted_price, trend, rsi, macd, signal,
+                bb_upper, bb_lower, volumes
             )
 
             prediction_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -619,35 +637,51 @@ class PredictionService:
 
     def _calculate_confidence_advanced(self, volumes: np.ndarray, prices: np.ndarray,
                                       current: float, bb_upper: float, bb_lower: float) -> float:
-        """고급 신뢰도 계산"""
-        confidence = 0.5
+        """신뢰도 계산
 
+        기본 신뢰도를 낮게 잡고 조건 충족 시 소폭 가산.
+        데이터 품질(충분한 데이터, 안정적 거래량, 낮은 변동성)을 반영.
+        """
+        confidence = 0.35
+
+        # 데이터 충분성 (최소 20일 이상이면 가산)
+        data_len = len(prices)
+        if data_len >= 20:
+            confidence += 0.05
+        if data_len >= 50:
+            confidence += 0.05
+
+        # 거래량 안정성 (최근 vs 평균 비율이 0.7~1.5 범위면 안정적)
         if len(volumes) >= 5:
             recent_volume = np.mean(volumes[:5])
             avg_volume = np.mean(volumes)
-
             if avg_volume > 0:
                 volume_ratio = recent_volume / avg_volume
-                if volume_ratio > 1.5:
-                    confidence += 0.2
-                elif volume_ratio > 1.0:
-                    confidence += 0.1
+                if 0.7 <= volume_ratio <= 1.5:
+                    confidence += 0.05
+                elif volume_ratio > 1.5:
+                    # 거래량 급증은 불확실성 증가
+                    confidence -= 0.05
 
+        # 가격 변동성 (낮을수록 예측 신뢰도 높음)
         if len(prices) >= 5:
             volatility = np.std(prices[:5]) / np.mean(prices[:5]) if np.mean(prices[:5]) > 0 else 0
             if volatility < 0.02:
-                confidence += 0.2
-            elif volatility < 0.05:
                 confidence += 0.1
-            else:
+            elif volatility < 0.04:
+                confidence += 0.05
+            elif volatility > 0.06:
                 confidence -= 0.1
 
-        if bb_upper != bb_lower:
+        # 볼린저밴드 폭 (좁을수록 안정적)
+        if bb_upper and bb_lower and bb_upper != bb_lower and current > 0:
             bb_width = (bb_upper - bb_lower) / current
-            if bb_width < 0.1:
-                confidence += 0.1
+            if bb_width < 0.05:
+                confidence += 0.05
+            elif bb_width > 0.15:
+                confidence -= 0.05
 
-        return min(0.95, max(0.3, confidence))
+        return min(0.80, max(0.25, confidence))
 
     def _analyze_trend(self, current: float, ma5: float, ma10: float, ma20: float, rsi: float) -> str:
         """추세 분석"""
@@ -683,47 +717,84 @@ class PredictionService:
             return 0.6
 
     def _get_recommendation(self, current: float, predicted: float, trend: str,
-                           rsi: float, macd: float, signal: float) -> str:
-        """투자의견 생성"""
-        change_rate = ((predicted - current) / current) * 100
+                           rsi: float, macd: float, signal: float,
+                           bb_upper: float = 0, bb_lower: float = 0,
+                           volumes: np.ndarray = None) -> str:
+        """멀티팩터 가중 스코어링 기반 투자의견
 
-        score = 0
+        각 팩터를 -1.0 ~ +1.0 으로 정규화한 뒤 가중 합산.
+        가중치 배분 (합계 1.0):
+          - 예측 변동률  0.30  (ML 핵심 시그널)
+          - 추세(MA)     0.25  (중기 방향성)
+          - RSI          0.20  (과매수/과매도)
+          - MACD         0.15  (모멘텀)
+          - 볼린저밴드   0.10  (평균회귀)
+        """
+        W_PRED = 0.30
+        W_TREND = 0.25
+        W_RSI = 0.20
+        W_MACD = 0.15
+        W_BB = 0.10
 
-        if change_rate > 3:
-            score += 2
-        elif change_rate > 1:
-            score += 1
-        elif change_rate < -3:
-            score -= 2
-        elif change_rate < -1:
-            score -= 1
+        # --- 1) 예측 변동률 시그널 ---
+        change_pct = ((predicted - current) / current) * 100 if current else 0
+        # ±5% 에서 포화, 연속 매핑
+        pred_score = max(-1.0, min(1.0, change_pct / 5.0))
 
-        if trend == "강한 상승":
-            score += 2
-        elif trend == "상승":
-            score += 1
-        elif trend == "강한 하락":
-            score -= 2
-        elif trend == "하락":
-            score -= 1
+        # --- 2) 추세 시그널 (MA 정렬) ---
+        trend_map = {
+            "강한 상승": 1.0,
+            "상승": 0.5,
+            "보합": 0.0,
+            "하락": -0.5,
+            "강한 하락": -1.0,
+        }
+        trend_score = trend_map.get(trend, 0.0)
 
-        if rsi < 30:
-            score += 1
-        elif rsi > 70:
-            score -= 1
-
-        if macd > signal:
-            score += 1
+        # --- 3) RSI 시그널 (연속 매핑) ---
+        # RSI 50 = 중립, 30/70 = ±0.5, 20/80 = ±1.0
+        if rsi <= 20:
+            rsi_score = 1.0
+        elif rsi <= 50:
+            rsi_score = (50 - rsi) / 30.0        # 50→0, 20→1.0
+        elif rsi <= 80:
+            rsi_score = (50 - rsi) / 30.0        # 50→0, 80→-1.0
         else:
-            score -= 1
+            rsi_score = -1.0
 
-        if score >= 3:
+        # --- 4) MACD 시그널 ---
+        macd_diff = macd - signal
+        if current > 0:
+            # 가격 대비 정규화, ±0.5% 에서 포화
+            norm_macd = (macd_diff / current) * 100
+            macd_score = max(-1.0, min(1.0, norm_macd / 0.5))
+        else:
+            macd_score = 0.0
+
+        # --- 5) 볼린저밴드 시그널 (평균회귀) ---
+        if bb_upper and bb_lower and bb_upper != bb_lower:
+            bb_pos = (current - bb_lower) / (bb_upper - bb_lower)
+            # 0.5 = 중립, 0 = 하단(매수), 1 = 상단(매도)
+            bb_score = max(-1.0, min(1.0, (0.5 - bb_pos) * 2))
+        else:
+            bb_score = 0.0
+
+        # --- 가중 합산 ---
+        total = (W_PRED * pred_score
+                 + W_TREND * trend_score
+                 + W_RSI * rsi_score
+                 + W_MACD * macd_score
+                 + W_BB * bb_score)
+
+        # --- 판정 (total 범위: -1.0 ~ +1.0) ---
+        # "적극"은 대부분의 지표가 같은 방향을 가리킬 때만 발생
+        if total >= 0.65:
             return "적극 매수"
-        elif score >= 1:
+        elif total >= 0.2:
             return "매수"
-        elif score <= -3:
+        elif total <= -0.65:
             return "적극 매도"
-        elif score <= -1:
+        elif total <= -0.2:
             return "매도"
         else:
             return "보유"
@@ -738,12 +809,7 @@ class PredictionService:
         }
 
         try:
-            from app.config import get_settings
-            from sqlalchemy import create_engine, text
-
-            settings = get_settings()
-            db_url = settings.database_url.replace("+asyncpg", "")
-            engine = create_engine(db_url)
+            engine, _ = _get_sync_db()
 
             query = text("""
                 SELECT

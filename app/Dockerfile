@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Python 패키지 설치
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 # 애플리케이션 코드 복사
 COPY . .
@@ -30,4 +30,4 @@ EXPOSE 8000
 ENV PYTHONUNBUFFERED=1
 
 # 애플리케이션 실행
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-keep-alive", "30", "--no-access-log"]

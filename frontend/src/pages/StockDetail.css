@@ -531,6 +531,97 @@
   letter-spacing: 0.3px;
 }
 
+.sd-order-type-tabs {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 3px;
+  border-radius: 8px;
+}
+
+.sd-order-type-tab {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.45);
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.sd-order-type-tab:hover {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.sd-order-type-tab.active {
+  background: rgba(100, 108, 255, 0.25);
+  color: #fff;
+  font-weight: 600;
+}
+
+.sd-quantity-control {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sd-qty-btn {
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sd-qty-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.sd-qty-btn:active {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.sd-quantity-control input {
+  flex: 1;
+  min-width: 0;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  text-align: center;
+  padding: 0.8rem 0.5rem;
+  color: rgba(255, 255, 255, 0.87);
+  font-size: 0.9rem;
+  font-family: inherit;
+  -moz-appearance: textfield;
+}
+
+.sd-quantity-control input::-webkit-outer-spin-button,
+.sd-quantity-control input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.sd-quantity-control input:focus {
+  outline: none;
+}
+
 .sd-trade-group input,
 .sd-trade-group select {
   padding: 0.8rem 1rem;
@@ -1032,6 +1123,19 @@
     height: 45px;
     border-radius: 6px;
   }
+
+  .sd-quantity-control {
+    min-width: 0;
+  }
+  .sd-qty-btn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+  }
+  .sd-quantity-control input {
+    min-width: 0;
+    padding: 0.7rem 0.25rem;
+  }
 }
 
 /* ===== Light Mode ===== */
@@ -1105,6 +1209,37 @@
   .sd-trade-tab:hover { color: rgba(17, 24, 39, 0.7); }
   .sd-trade-tab.buy.active { background: #dc2626; color: #fff; }
   .sd-trade-tab.sell.active { background: #2563eb; color: #fff; }
+
+  .sd-order-type-tabs { background: #f3f4f6; }
+  .sd-order-type-tab { color: rgba(17, 24, 39, 0.45); }
+  .sd-order-type-tab:hover { color: rgba(17, 24, 39, 0.7); }
+  .sd-order-type-tab.active {
+    background: rgba(79, 70, 229, 0.15);
+    color: #4f46e5;
+  }
+
+  .sd-quantity-control {
+    background: #f9fafb;
+    border-color: #e5e7eb;
+  }
+  .sd-qty-btn {
+    background: #e5e7eb;
+    color: #374151;
+  }
+  .sd-qty-btn:hover {
+    background: #d1d5db;
+    color: #111827;
+  }
+  .sd-qty-btn:active { background: #c4c8cf; }
+  .sd-quantity-control input {
+    color: #111827;
+  }
+
+  .trend-neutral {
+    background: rgba(107, 114, 128, 0.1);
+    color: #4b5563;
+    border-color: rgba(107, 114, 128, 0.2);
+  }
 
   .sd-trade-group label { color: rgba(17, 24, 39, 0.5); }
   .sd-trade-group input,
