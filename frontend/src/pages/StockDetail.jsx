@@ -53,9 +53,9 @@ function StockDetail() {
       alert('매수 주문이 접수되었습니다')
       setOrderForm(prev => ({ ...prev, quantity: '' }))
     },
-    onError: (error, response) => {
-      alert(`매수 실패: ${error.message}`)
-      alert(`매수 실패: ${response.detail}`)
+    onError: (error) => {
+      const serverMessage = error.response?.data?.detail || error.message;
+      alert(`${serverMessage}`);
     }
   })
 
@@ -67,7 +67,8 @@ function StockDetail() {
       setOrderForm(prev => ({ ...prev, quantity: '' }))
     },
     onError: (error) => {
-      alert(`매도 실패: ${error.message}`)
+      const serverMessage = error.response?.data?.detail || error.message;
+      alert(`${serverMessage}`);
     }
   })
 
