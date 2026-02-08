@@ -456,6 +456,116 @@
   white-space: nowrap;
 }
 
+/* ===== Accuracy Section ===== */
+.sd-accuracy-section {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sd-accuracy-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.sd-accuracy-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.sd-accuracy-label {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+}
+
+.sd-accuracy-value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.sd-accuracy-stat .sd-confidence {
+  max-width: 140px;
+}
+
+.sd-accuracy-history {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 0.75rem;
+}
+
+.sd-accuracy-history-title {
+  display: block;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.sd-accuracy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sd-accuracy-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 32px;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  gap: 0.5rem;
+}
+
+.sd-accuracy-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sd-accuracy-date {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.75rem;
+}
+
+.sd-accuracy-pred {
+  color: rgba(255, 255, 255, 0.75);
+  text-align: right;
+  font-weight: 500;
+}
+
+.sd-accuracy-actual {
+  color: rgba(255, 255, 255, 0.75);
+  text-align: right;
+  font-weight: 500;
+}
+
+.sd-accuracy-icon {
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.sd-accuracy-icon.correct {
+  color: #22c55e;
+}
+
+.sd-accuracy-icon.wrong {
+  color: #ef4444;
+}
+
+.sd-accuracy-empty {
+  text-align: center;
+  padding: 0.75rem;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
 .sd-pred-disclaimer {
   margin: 0;
   font-size: 0.78rem;
@@ -1203,6 +1313,20 @@
     color: rgba(17, 24, 39, 0.4);
     border-left-color: rgba(79, 70, 229, 0.2);
   }
+
+  .sd-accuracy-section {
+    background: #f9fafb;
+    border-color: #e5e7eb;
+  }
+  .sd-accuracy-label { color: rgba(17, 24, 39, 0.45); }
+  .sd-accuracy-value { color: #111827; }
+  .sd-accuracy-history { border-top-color: #e5e7eb; }
+  .sd-accuracy-history-title { color: rgba(17, 24, 39, 0.4); }
+  .sd-accuracy-date { color: rgba(17, 24, 39, 0.45); }
+  .sd-accuracy-pred { color: rgba(17, 24, 39, 0.7); }
+  .sd-accuracy-actual { color: rgba(17, 24, 39, 0.7); }
+  .sd-accuracy-row:hover { background: rgba(0, 0, 0, 0.03); }
+  .sd-accuracy-empty { color: rgba(17, 24, 39, 0.35); }
 
   .sd-trade-tabs { background: #f3f4f6; }
   .sd-trade-tab { color: rgba(17, 24, 39, 0.45); }

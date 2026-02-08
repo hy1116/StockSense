@@ -154,3 +154,22 @@ class StockSearchResponse(BaseModel):
     """종목 검색 응답"""
     results: List[StockSearchItem] = Field(default=[], description="검색 결과 리스트")
     total: int = Field(..., description="검색 결과 수")
+
+
+class PredictionHistoryItem(BaseModel):
+    """개별 예측 기록"""
+    prediction_date: str = Field(..., description="예측 날짜")
+    predicted_price: float = Field(..., description="예측가")
+    actual_price: Optional[float] = Field(None, description="실제 종가")
+    error_rate: Optional[float] = Field(None, description="오차율 (%)")
+    direction_correct: Optional[bool] = Field(None, description="방향 적중 여부")
+
+
+class PredictionAccuracyResponse(BaseModel):
+    """예측 적중률 응답"""
+    stock_code: str = Field(..., description="종목코드")
+    total_predictions: int = Field(..., description="전체 예측 수")
+    evaluated_count: int = Field(..., description="평가 완료 수")
+    direction_accuracy: Optional[float] = Field(None, description="방향 적중률 (%)")
+    avg_error_rate: Optional[float] = Field(None, description="평균 오차율 (%)")
+    recent_predictions: List[PredictionHistoryItem] = Field(default=[], description="최근 예측 기록")

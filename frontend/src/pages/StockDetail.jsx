@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { getStockDetail, getStockIntraday, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock } from '../services/api'
+import { getStockDetail, getStockIntraday, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock, getPredictionAccuracy } from '../services/api'
 import { createChart } from 'lightweight-charts'
 import './StockDetail.css'
 
@@ -33,6 +33,10 @@ function StockDetail() {
   const [newsPage, setNewsPage] = useState(1)
   const [hasMoreNews, setHasMoreNews] = useState(false)
   const [totalNews, setTotalNews] = useState(0)
+
+  // 적중률 관련 state
+  const [accuracy, setAccuracy] = useState(null)
+  const [accuracyLoading, setAccuracyLoading] = useState(false)
 
   // 주문 관련 state
   const [tradeTab, setTradeTab] = useState('buy')
@@ -194,6 +198,19 @@ function StockDetail() {
       console.error('Error fetching news:', err)
     } finally {
       setNewsLoading(false)
+    }
+  }
+
+  // 적중률 조회
+  const fetchAccuracy = async () => {
+    setAccuracyLoading(true)
+    try {
+      const data = await getPredictionAccuracy(symbol, 30)
+      setAccuracy(data)
+    } catch (err) {
+      console.error('Error fetching accuracy:', err)
+    } finally {
+      setAccuracyLoading(false)
     }
   }
 
@@ -507,11 +524,12 @@ function StockDetail() {
     }
   }, [symbol])
 
-  // 뉴스 및 댓글 로드
+  // 뉴스, 댓글, 적중률 로드
   useEffect(() => {
     if (symbol) {
       fetchComments(1)
       fetchNews(1)
+      fetchAccuracy()
     }
   }, [symbol])
 
@@ -738,6 +756,68 @@ function StockDetail() {
                   <span className="sd-confidence-text">{(prediction.confidence * 100).toFixed(0)}%</span>
                 </div>
               </div>
+            </div>
+            {/* 적중률 */}
+            <div className="sd-accuracy-section">
+              {accuracyLoading ? (
+                <p className="sd-loading-text">적중률을 불러오는 중...</p>
+              ) : accuracy && accuracy.evaluated_count > 0 ? (
+                <>
+                  <div className="sd-accuracy-stats">
+                    <div className="sd-accuracy-stat">
+                      <span className="sd-accuracy-label">방향 적중률</span>
+                      <div className="sd-confidence">
+                        <div className="sd-confidence-bar">
+                          <div
+                            className="sd-confidence-fill"
+                            style={{ width: `${accuracy.direction_accuracy ?? 0}%` }}
+                          />
+                        </div>
+                        <span className="sd-confidence-text">
+                          {accuracy.direction_accuracy !== null ? `${accuracy.direction_accuracy}%` : '-'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="sd-accuracy-stat">
+                      <span className="sd-accuracy-label">평균 오차율</span>
+                      <span className="sd-accuracy-value">
+                        {accuracy.avg_error_rate !== null ? `${accuracy.avg_error_rate}%` : '-'}
+                      </span>
+                    </div>
+                    <div className="sd-accuracy-stat">
+                      <span className="sd-accuracy-label">평가 건수</span>
+                      <span className="sd-accuracy-value">
+                        {accuracy.evaluated_count} / {accuracy.total_predictions}
+                      </span>
+                    </div>
+                  </div>
+                  {accuracy.recent_predictions && accuracy.recent_predictions.length > 0 && (
+                    <div className="sd-accuracy-history">
+                      <span className="sd-accuracy-history-title">최근 예측 기록</span>
+                      <div className="sd-accuracy-list">
+                        {accuracy.recent_predictions.map((item, idx) => (
+                          <div key={idx} className="sd-accuracy-row">
+                            <span className="sd-accuracy-date">{item.prediction_date}</span>
+                            <span className="sd-accuracy-pred">
+                              {formatNumber(Math.round(item.predicted_price))}
+                            </span>
+                            <span className="sd-accuracy-actual">
+                              {item.actual_price ? formatNumber(Math.round(item.actual_price)) : '-'}
+                            </span>
+                            <span className={`sd-accuracy-icon ${item.direction_correct === true ? 'correct' : item.direction_correct === false ? 'wrong' : ''}`}>
+                              {item.direction_correct === true ? 'O' : item.direction_correct === false ? 'X' : '-'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="sd-accuracy-empty">
+                  예측 기록이 쌓이면 적중률이 표시됩니다
+                </p>
+              )}
             </div>
             <p className="sd-pred-disclaimer">
               * 이 예측은 XGBoost + LSTM 앙상블 모델과 뉴스 감성 분석을 활용한 AI 분석이며, 투자 권유가 아닙니다.

@@ -43,9 +43,10 @@ def main():
     logger.info(f"=== ML Pipeline started at {start.isoformat()} ===")
 
     run_step("1. 일일 데이터 수집", "collect_daily_data.py")
-    run_step("2. 뉴스 크롤링 및 감성분석", "crawl_news.py", ["--hours", "0"])
-    run_step("3. 데이터 전처리", "preprocess_data.py")
-    run_step("4. 모델 학습 (XGBoost + LSTM)", "daily_train_batch.py")
+    run_step("2. 전일 예측 평가", "evaluate_predictions.py")
+    run_step("3. 뉴스 크롤링 및 감성분석", "crawl_news.py", ["--hours", "0"])
+    run_step("4. 데이터 전처리", "preprocess_data.py")
+    run_step("5. 모델 학습 (XGBoost + LSTM)", "daily_train_batch.py")
 
     elapsed = datetime.now() - start
     logger.info(f"=== ML Pipeline completed in {elapsed} ===")

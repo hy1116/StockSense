@@ -181,6 +181,15 @@ export const getPrediction = async (stockCode) => {
   return response.data
 }
 
+// ===== Prediction Accuracy API =====
+
+export const getPredictionAccuracy = async (stockCode, days = 30) => {
+  const response = await api.get(`/api/prediction/${stockCode.toUpperCase()}/accuracy`, {
+    params: { days }
+  })
+  return response.data
+}
+
 // ===== Stock Detail API =====
 
 export const getStockDetail = async (symbol) => {
