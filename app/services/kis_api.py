@@ -56,7 +56,7 @@ class KISAPIClient:
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
-        self._default_timeout = 15
+        self._default_timeout = 8
 
     def _log_request(self, method: str, url: str, headers: Dict, params: Dict = None, data: Dict = None):
         """KIS API 요청 로깅"""
@@ -319,14 +319,15 @@ class KISAPIClient:
         else:
             raise Exception(f"차트 데이터 조회 실패: {response.text}")
 
-    def get_minute_chart(self, stock_code: str) -> Dict:
+    def get_minute_chart(self, stock_code: str, interval: int = 1) -> Dict:
         """주식 당일 분봉 조회 (페이징으로 전체 장중 데이터 수집)
 
         Args:
             stock_code: 종목코드 (6자리)
+            interval: 분봉 간격 (분 단위, 1/5/10/30/60)
 
         Returns:
-            당일 분봉 데이터 (09:00 ~ 현재시간, 1분 단위)
+            당일 분봉 데이터 (09:00 ~ 현재시간)
         """
         import time as _time
 
@@ -388,10 +389,82 @@ class KISAPIClient:
             # API 호출 간격 (초당 20회 제한 고려)
             _time.sleep(0.08)
 
+        # 분봉 간격 집계 (interval > 1인 경우)
+        if interval > 1 and all_output2:
+            all_output2 = self._aggregate_minute_data(all_output2, interval)
+
         return {
             "rt_cd": "0",
             "output1": last_output1,
             "output2": all_output2
+        }
+
+    def _aggregate_minute_data(self, data: List[Dict], interval: int) -> List[Dict]:
+        """분봉 데이터를 지정 간격으로 집계
+
+        Args:
+            data: 1분봉 데이터 리스트
+            interval: 집계 간격 (분)
+
+        Returns:
+            집계된 분봉 데이터
+        """
+        if not data:
+            return data
+
+        # 시간순 정렬 (API는 역순이므로)
+        sorted_data = sorted(data, key=lambda x: x.get("stck_cntg_hour", ""))
+
+        aggregated = []
+        bucket = []
+
+        def get_bucket_key(time_str: str) -> str:
+            """시간을 interval 단위 버킷 키로 변환"""
+            if len(time_str) < 4:
+                return time_str
+            hh = int(time_str[:2])
+            mm = int(time_str[2:4])
+            total_min = hh * 60 + mm
+            bucket_min = (total_min // interval) * interval
+            return f"{bucket_min // 60:02d}{bucket_min % 60:02d}00"
+
+        current_key = None
+
+        for item in sorted_data:
+            time_str = item.get("stck_cntg_hour", "")
+            if not time_str or len(time_str) < 4:
+                continue
+
+            key = get_bucket_key(time_str)
+
+            if current_key is None:
+                current_key = key
+
+            if key != current_key:
+                # 이전 버킷 집계
+                if bucket:
+                    aggregated.append(self._merge_candles(bucket, current_key))
+                bucket = [item]
+                current_key = key
+            else:
+                bucket.append(item)
+
+        # 마지막 버킷
+        if bucket:
+            aggregated.append(self._merge_candles(bucket, current_key))
+
+        return aggregated
+
+    def _merge_candles(self, candles: List[Dict], time_key: str) -> Dict:
+        """여러 캔들을 하나로 병합 (OHLCV)"""
+        first = candles[0]
+        return {
+            "stck_cntg_hour": time_key,
+            "stck_oprc": first.get("stck_oprc", "0"),
+            "stck_hgpr": str(max(int(c.get("stck_hgpr", 0)) for c in candles)),
+            "stck_lwpr": str(min(int(c.get("stck_lwpr", 0)) for c in candles)),
+            "stck_prpr": candles[-1].get("stck_prpr", "0"),
+            "cntg_vol": str(sum(int(c.get("cntg_vol", 0)) for c in candles)),
         }
 
     def get_volume_ranking(self) -> Dict:

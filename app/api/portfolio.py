@@ -186,6 +186,19 @@ async def get_stock_detail(
 ):
     """종목 상세 정보 조회 (기본정보 + 차트 + 예측)"""
     try:
+        redis = get_redis_client()
+        cache_key = f"stock_detail:{stock_code}:period_{period}"
+
+        # Redis 캐시 확인 (10분)
+        if redis.is_available():
+            cached_data = redis.get(cache_key)
+            if cached_data:
+                try:
+                    cached_dict = json.loads(cached_data)
+                    return StockDetailInfo(**cached_dict)
+                except Exception:
+                    pass
+
         # 1. 현재가 정보 조회
         price_result = client.get_stock_price(stock_code)
         if price_result.get("rt_cd") != "0":
@@ -251,6 +264,14 @@ async def get_stock_detail(
             prediction=prediction_data
         )
 
+        # Redis 캐싱 (10분 = 600초)
+        if redis.is_available():
+            try:
+                cache_data = json.dumps(detail_info.model_dump())
+                redis.set(cache_key, cache_data, expire=600)
+            except Exception:
+                pass
+
         return detail_info
 
     except Exception as e:
@@ -260,11 +281,25 @@ async def get_stock_detail(
 @router.get("/stock/{stock_code}/intraday", response_model=list[MinuteChartData])
 async def get_stock_intraday(
     stock_code: str,
+    interval: int = Query(default=1, ge=1, le=60, description="분봉 간격 (분 단위: 1/5/10/30/60)"),
     client: KISAPIClient = Depends(get_kis_client)
 ):
-    """종목 당일 분봉 데이터 조회"""
+    """종목 당일 분봉 데이터 조회 (간격 조절 가능)"""
     try:
-        result = client.get_minute_chart(stock_code)
+        redis = get_redis_client()
+        cache_key = f"intraday:{stock_code}:interval_{interval}"
+
+        # Redis 캐시 확인 (10분)
+        if redis.is_available():
+            cached_data = redis.get(cache_key)
+            if cached_data:
+                try:
+                    cached_list = json.loads(cached_data)
+                    return [MinuteChartData(**item) for item in cached_list]
+                except Exception:
+                    pass
+
+        result = client.get_minute_chart(stock_code, interval=interval)
         if result.get("rt_cd") != "0":
             raise HTTPException(
                 status_code=400,
@@ -296,6 +331,15 @@ async def get_stock_intraday(
 
         # 시간순 정렬 (API는 역순)
         chart_data.sort(key=lambda x: x.time)
+
+        # Redis 캐싱 (10분 = 600초)
+        if redis.is_available() and chart_data:
+            try:
+                cache_data = json.dumps([item.model_dump() for item in chart_data])
+                redis.set(cache_key, cache_data, expire=600)
+            except Exception:
+                pass
+
         return chart_data
 
     except HTTPException:
@@ -433,7 +477,17 @@ async def get_market_cap_stocks(
         redis = get_redis_client()
         cache_key = f"top_market_cap_stocks:limit_{limit}"
 
-        # KIS API 호출 (시가총액 순위)
+        # 1. Redis 캐시 확인
+        if redis.is_available():
+            cached_data = redis.get(cache_key)
+            if cached_data:
+                try:
+                    cached_dict = json.loads(cached_data)
+                    return TopStocksResponse(**cached_dict)
+                except Exception:
+                    pass
+
+        # 2. KIS API 호출 (시가총액 순위)
         result = client.get_market_cap_ranking(top_n=limit)
 
         if result.get("rt_cd") != "0":
@@ -457,6 +511,14 @@ async def get_market_cap_stocks(
             stocks.append(stock)
 
         response = TopStocksResponse(stocks=stocks)
+
+        # 3. Redis에 캐싱 (10분 = 600초)
+        if redis.is_available():
+            try:
+                cache_data = json.dumps(response.model_dump())
+                redis.set(cache_key, cache_data, expire=600)
+            except Exception:
+                pass
 
         return response
 
@@ -530,18 +592,18 @@ async def get_fluctuation_stocks(
 ):
     """등락률 상위 종목 조회 (Redis 캐시 10분)"""
     try:
-        # redis = get_redis_client()
-        # cache_key = f"top_fluctuation_stocks:limit_{limit}"
+        redis = get_redis_client()
+        cache_key = f"top_fluctuation_stocks:limit_{limit}:sort_{sort}"
 
-        # # 1. Redis 캐시 확인
-        # if redis.is_available():
-        #     cached_data = redis.get(cache_key)
-        #     if cached_data:
-        #         try:
-        #             cached_dict = json.loads(cached_data)
-        #             return TopStocksResponse(**cached_dict)
-        #         except Exception:
-        #             pass
+        # 1. Redis 캐시 확인
+        if redis.is_available():
+            cached_data = redis.get(cache_key)
+            if cached_data:
+                try:
+                    cached_dict = json.loads(cached_data)
+                    return TopStocksResponse(**cached_dict)
+                except Exception:
+                    pass
 
         # 2. KIS API 호출 (등락률 순위)
         result = client.get_fluctuation_ranking(top_n=limit, sort_code=sort)
@@ -567,6 +629,14 @@ async def get_fluctuation_stocks(
             stocks.append(stock)
 
         response = TopStocksResponse(stocks=stocks)
+
+        # 3. Redis에 캐싱 (10분 = 600초)
+        if redis.is_available():
+            try:
+                cache_data = json.dumps(response.model_dump())
+                redis.set(cache_key, cache_data, expire=600)
+            except Exception:
+                pass
 
         return response
 
