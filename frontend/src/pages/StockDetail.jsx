@@ -364,8 +364,9 @@ function StockDetail() {
     }
 
     // 기간별 바 간격 계산 (차트 너비에 맞게 캔들을 고르게 배치)
+    // 1D: 10분 단위 ~39개, 1W: 5일, 1M: 22일, 3M: 65일, 1Y: 주봉 ~52개
     const containerWidth = chartContainerRef.current.clientWidth
-    const visibleBarCount = isIntraday ? 390 : ({ '1W': 5, '1M': 22, '3M': 65, '1Y': 250 }[period] || 65)
+    const visibleBarCount = isIntraday ? 39 : ({ '1W': 5, '1M': 22, '3M': 65, '1Y': 52 }[period] || 65)
     const calcBarSpacing = Math.max(4, Math.min(60, (containerWidth - 80) / (visibleBarCount + 2)))
 
     const chart = createChart(chartContainerRef.current, {
@@ -389,6 +390,8 @@ function StockDetail() {
         borderVisible: false,
         scaleMargins: { top: 0.08, bottom: 0.2 },
       },
+      handleScroll: false,
+      handleScale: false,
       timeScale: {
         borderVisible: false,
         timeVisible: isIntraday,
@@ -396,7 +399,7 @@ function StockDetail() {
         rightOffset: 2,
         barSpacing: calcBarSpacing,
         minBarSpacing: 3,
-        fixLeftEdge: visibleBarCount <= 22,
+        fixLeftEdge: true,
         fixRightEdge: true,
       },
     })
@@ -430,37 +433,88 @@ function StockDetail() {
     let volumeResult = []
 
     if (isIntraday) {
-      // 분봉 모드: 시간 기반 (HH:MM → Unix timestamp)
-      // lightweight-charts는 UTC 기준으로 시간을 표시하므로,
-      // KST 시간이 정확히 표시되도록 UTC 기준 timestamp를 생성
+      // 분봉 모드: 10분 단위로 샘플링
       const today = new Date()
       const yyyy = today.getFullYear()
       const mm = today.getMonth()
       const dd = today.getDate()
 
+      // 10분 단위로 그룹핑하여 OHLCV 집계
+      const grouped = {}
       intradayData.forEach(d => {
         if (!d.time) return
         const [hh, mi] = d.time.split(':').map(Number)
-        // Date.UTC로 생성하여 chart가 UTC로 해석할 때 KST 시간이 그대로 표시되도록 함
-        const ts = Math.floor(Date.UTC(yyyy, mm, dd, hh, mi, 0) / 1000)
-
-        if (d.open > 0 && d.high > 0 && d.low > 0 && d.close > 0) {
-          candleResult.push({
-            time: ts,
-            open: d.open,
-            high: d.high,
-            low: d.low,
-            close: d.close,
-          })
-          volumeResult.push({
-            time: ts,
-            value: d.volume || 0,
-            color: d.close >= d.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
-          })
+        if (d.open <= 0 || d.high <= 0 || d.low <= 0 || d.close <= 0) return
+        const bucketMin = Math.floor(mi / 10) * 10
+        const key = `${String(hh).padStart(2, '0')}:${String(bucketMin).padStart(2, '0')}`
+        if (!grouped[key]) {
+          grouped[key] = { open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume || 0 }
+        } else {
+          grouped[key].high = Math.max(grouped[key].high, d.high)
+          grouped[key].low = Math.min(grouped[key].low, d.low)
+          grouped[key].close = d.close
+          grouped[key].volume += (d.volume || 0)
         }
       })
+
+      Object.keys(grouped).sort().forEach(key => {
+        const [hh, mi] = key.split(':').map(Number)
+        const ts = Math.floor(Date.UTC(yyyy, mm, dd, hh, mi, 0) / 1000)
+        const g = grouped[key]
+        candleResult.push({ time: ts, open: g.open, high: g.high, low: g.low, close: g.close })
+        volumeResult.push({
+          time: ts,
+          value: g.volume,
+          color: g.close >= g.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
+        })
+      })
+    } else if (period === '1Y') {
+      // 1년: 1주일 단위로 집계 (주봉)
+      const sortedData = [...chartData].reverse()
+      const seenTimes = new Set()
+      const dailyCandles = []
+
+      sortedData.forEach(d => {
+        if (!d.date || d.date.length < 8) return
+        const time = `${d.date.slice(0, 4)}-${d.date.slice(4, 6)}-${d.date.slice(6, 8)}`
+        if (seenTimes.has(time)) return
+        seenTimes.add(time)
+        if (d.open > 0 && d.high > 0 && d.low > 0 && d.close > 0) {
+          dailyCandles.push({ time, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume || 0 })
+        }
+      })
+
+      // 주 단위로 그룹핑 (월요일 기준)
+      const weeklyMap = {}
+      dailyCandles.forEach(d => {
+        const date = new Date(d.time + 'T00:00:00')
+        const day = date.getDay()
+        const diff = day === 0 ? -6 : 1 - day
+        const monday = new Date(date)
+        monday.setDate(date.getDate() + diff)
+        const weekKey = monday.toISOString().slice(0, 10)
+        if (!weeklyMap[weekKey]) {
+          weeklyMap[weekKey] = { time: d.time, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume }
+        } else {
+          weeklyMap[weekKey].high = Math.max(weeklyMap[weekKey].high, d.high)
+          weeklyMap[weekKey].low = Math.min(weeklyMap[weekKey].low, d.low)
+          weeklyMap[weekKey].close = d.close
+          weeklyMap[weekKey].volume += d.volume
+          weeklyMap[weekKey].time = d.time // 주의 마지막 거래일 날짜 사용
+        }
+      })
+
+      Object.keys(weeklyMap).sort().forEach(weekKey => {
+        const w = weeklyMap[weekKey]
+        candleResult.push({ time: w.time, open: w.open, high: w.high, low: w.low, close: w.close })
+        volumeResult.push({
+          time: w.time,
+          value: w.volume,
+          color: w.close >= w.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
+        })
+      })
     } else {
-      // 일봉 모드: 날짜 기반
+      // 1주(1W), 1개월(1M), 3개월(3M): 1일 단위 (일봉 그대로)
       const sortedData = [...chartData].reverse()
       const seenTimes = new Set()
 
@@ -484,28 +538,8 @@ function StockDetail() {
     candleSeries.setData(candleResult)
     volumeSeries.setData(volumeResult)
 
-    if (isIntraday) {
-      chart.timeScale().fitContent()
-    } else {
-      // period별 표시 범위 (거래일 기준)
-      const visibleMap = { '1W': 5, '1M': 22, '3M': 65, '1Y': 250 }
-      const visibleBars = visibleMap[period] || 65
-      const totalBars = candleResult.length
-      if (visibleBars <= 22) {
-        // 1주, 1개월: fitContent로 전체 너비에 고르게 배치
-        chart.timeScale().setVisibleLogicalRange({
-          from: totalBars - visibleBars - 1,
-          to: totalBars + 1,
-        })
-      } else if (totalBars > visibleBars) {
-        chart.timeScale().setVisibleLogicalRange({
-          from: totalBars - visibleBars,
-          to: totalBars,
-        })
-      } else {
-        chart.timeScale().fitContent()
-      }
-    }
+    // 스크롤 비활성화 상태이므로 항상 전체 데이터를 표시
+    chart.timeScale().fitContent()
 
     const handleResize = () => {
       if (chartContainerRef.current && chartInstanceRef.current) {
