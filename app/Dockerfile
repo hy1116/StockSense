@@ -32,7 +32,6 @@ EXPOSE 8000
 
 # 환경 변수 설정
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
 
 # 애플리케이션 실행
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-keep-alive", "30", "--no-access-log"]

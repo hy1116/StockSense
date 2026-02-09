@@ -40,7 +40,7 @@ ENV/
 *.sqlite3
 
 # Models and Data
-models/
+/models/
 data/
 *.h5
 *.pkl
