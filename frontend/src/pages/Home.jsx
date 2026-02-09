@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getHealthCheck, getTopStocks, getMarketCapStocks, getFluctuationStocks, getPortfolio, searchStocks, getWatchlist } from '../services/api'
-import useBalanceWebSocket from '../hooks/useBalanceWebSocket'
 import './Home.css'
 
 function Home() {
@@ -66,17 +65,13 @@ function Home() {
     enabled: isLoggedIn && activeTab === 'watchlist',
   })
 
-  // WebSocket 실시간 잔고
-  const { data: wsPortfolio, connected: wsConnected } = useBalanceWebSocket(isLoggedIn)
-
-  const { data: httpPortfolio, isLoading: isLoadingPortfolio } = useQuery({
+  // HTTP polling 잔고 조회 (30초 간격)
+  const { data: portfolio, isLoading: isLoadingPortfolio } = useQuery({
     queryKey: ['portfolio'],
     queryFn: getPortfolio,
-    refetchInterval: wsConnected ? false : 30000,
-    enabled: isLoggedIn && !wsConnected,
+    refetchInterval: 30000,
+    enabled: isLoggedIn,
   })
-
-  const portfolio = wsPortfolio || httpPortfolio
 
   const formatNumber = (num) => {
     if (!num) return '0'

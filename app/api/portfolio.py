@@ -1,7 +1,7 @@
 """포트폴리오 API 엔드포인트"""
 import asyncio
 from functools import partial
-from fastapi import APIRouter, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from typing import List
@@ -652,72 +652,3 @@ async def get_fluctuation_stocks(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-def _fetch_balance_data() -> dict:
-    """잔고 데이터를 KIS API 또는 Redis 캐시에서 조회"""
-    redis = get_redis_client()
-    cache_key = "ws:balance"
-
-    # 캐시 확인 (5초 TTL)
-    if redis.is_available():
-        cached = redis.get(cache_key)
-        if cached:
-            return json.loads(cached)
-
-    # KIS API 호출
-    client = get_kis_client()
-    result = client.get_balance()
-
-    if result.get("rt_cd") != "0":
-        return None
-
-    output1 = result.get("output1", [])
-    output2 = result.get("output2", [{}])[0]
-
-    holdings = []
-    for item in output1:
-        holdings.append({
-            "stock_code": item.get("pdno", ""),
-            "stock_name": item.get("prdt_name", ""),
-            "quantity": int(item.get("hldg_qty", 0)),
-            "avg_price": float(item.get("pchs_avg_pric", 0)),
-            "current_price": float(item.get("prpr", 0)),
-            "eval_amount": float(item.get("evlu_amt", 0)),
-            "profit_loss": float(item.get("evlu_pfls_amt", 0)),
-            "profit_rate": float(item.get("evlu_pfls_rt", 0)),
-        })
-
-    evlu_pfls = float(output2.get("evlu_pfls_smtl_amt", 0))
-    pchs_amt = float(output2.get("pchs_amt_smtl_amt", 0))
-
-    data = {
-        "total_asset": float(output2.get("tot_evlu_amt", 0)),
-        "cash": float(output2.get("dnca_tot_amt", 0)),
-        "stock_eval_amount": float(output2.get("scts_evlu_amt", 0)),
-        "total_profit_loss": evlu_pfls,
-        "pchs_amt_smtl_amt": pchs_amt,
-        "total_profit_rate": round(evlu_pfls / pchs_amt * 100, 2) if pchs_amt else 0,
-        "holdings": holdings,
-    }
-
-    # Redis 캐시 (5초)
-    if redis.is_available():
-        redis.set(cache_key, json.dumps(data), expire=5)
-
-    return data
-
-
-@router.websocket("/ws/balance")
-async def ws_balance(websocket: WebSocket):
-    """실시간 잔고 WebSocket"""
-    await websocket.accept()
-    logger.info("WebSocket balance client connected")
-    try:
-        while True:
-            data = await run_sync(_fetch_balance_data)
-            if data:
-                await websocket.send_json(data)
-            await asyncio.sleep(5)
-    except WebSocketDisconnect:
-        logger.info("WebSocket balance client disconnected")
-    except Exception as e:
-        logger.error(f"WebSocket balance error: {e}")

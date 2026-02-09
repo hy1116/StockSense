@@ -347,7 +347,7 @@ function StockDetail() {
   const initChart = useCallback(() => {
     if (!chartContainerRef.current || !stockData) return
 
-    const isIntraday = ['1D', '1W', '1M'].includes(period)
+    const isIntraday = period === '1D'
 
     // 분봉 모드인데 데이터 없으면 스킵
     if (isIntraday && (!intradayData || intradayData.length === 0)) return
@@ -366,8 +366,8 @@ function StockDetail() {
     // 기간별 바 간격 계산 (차트 너비에 맞게 캔들을 고르게 배치)
     // 1D: 10분 단위 ~39개, 1W: 5일, 1M: 22일, 3M: 65일, 1Y: 주봉 ~52개
     const containerWidth = chartContainerRef.current.clientWidth
-    // 1D: 10분 단위 ~39개, 1W: 30분 단위 ~13개, 1M: 60분 단위 ~7개, 3M: 65일, 1Y: 52주
-    const visibleBarCount = { '1D': 39, '1W': 13, '1M': 7, '3M': 65, '1Y': 52 }[period] || 65
+    // 1D: 10분 단위 ~39개, 1W: 5일, 1M: 22일, 3M: 65일, 1Y: 52주
+    const visibleBarCount = { '1D': 39, '1W': 5, '1M': 22, '3M': 65, '1Y': 52 }[period] || 65
     const calcBarSpacing = Math.max(4, Math.min(60, (containerWidth - 80) / (visibleBarCount + 2)))
 
     const chart = createChart(chartContainerRef.current, {
@@ -434,57 +434,40 @@ function StockDetail() {
     let volumeResult = []
 
     if (isIntraday) {
-      // 분봉 모드: 1D=10분 그룹핑, 1W/1M=서버에서 이미 집계됨
+      // 1D: 10분 단위로 그룹핑하여 OHLCV 집계
       const today = new Date()
       const yyyy = today.getFullYear()
       const mm = today.getMonth()
       const dd = today.getDate()
 
-      if (period === '1D') {
-        // 1D: 10분 단위로 그룹핑하여 OHLCV 집계
-        const grouped = {}
-        intradayData.forEach(d => {
-          if (!d.time) return
-          const [hh, mi] = d.time.split(':').map(Number)
-          if (d.open <= 0 || d.high <= 0 || d.low <= 0 || d.close <= 0) return
-          const bucketMin = Math.floor(mi / 10) * 10
-          const key = `${String(hh).padStart(2, '0')}:${String(bucketMin).padStart(2, '0')}`
-          if (!grouped[key]) {
-            grouped[key] = { open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume || 0 }
-          } else {
-            grouped[key].high = Math.max(grouped[key].high, d.high)
-            grouped[key].low = Math.min(grouped[key].low, d.low)
-            grouped[key].close = d.close
-            grouped[key].volume += (d.volume || 0)
-          }
-        })
+      const grouped = {}
+      intradayData.forEach(d => {
+        if (!d.time) return
+        const [hh, mi] = d.time.split(':').map(Number)
+        if (d.open <= 0 || d.high <= 0 || d.low <= 0 || d.close <= 0) return
+        const bucketMin = Math.floor(mi / 10) * 10
+        const key = `${String(hh).padStart(2, '0')}:${String(bucketMin).padStart(2, '0')}`
+        if (!grouped[key]) {
+          grouped[key] = { open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume || 0 }
+        } else {
+          grouped[key].high = Math.max(grouped[key].high, d.high)
+          grouped[key].low = Math.min(grouped[key].low, d.low)
+          grouped[key].close = d.close
+          grouped[key].volume += (d.volume || 0)
+        }
+      })
 
-        Object.keys(grouped).sort().forEach(key => {
-          const [hh, mi] = key.split(':').map(Number)
-          const ts = Math.floor(Date.UTC(yyyy, mm, dd, hh, mi, 0) / 1000)
-          const g = grouped[key]
-          candleResult.push({ time: ts, open: g.open, high: g.high, low: g.low, close: g.close })
-          volumeResult.push({
-            time: ts,
-            value: g.volume,
-            color: g.close >= g.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
-          })
+      Object.keys(grouped).sort().forEach(key => {
+        const [hh, mi] = key.split(':').map(Number)
+        const ts = Math.floor(Date.UTC(yyyy, mm, dd, hh, mi, 0) / 1000)
+        const g = grouped[key]
+        candleResult.push({ time: ts, open: g.open, high: g.high, low: g.low, close: g.close })
+        volumeResult.push({
+          time: ts,
+          value: g.volume,
+          color: g.close >= g.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
         })
-      } else {
-        // 1W(30분), 1M(60분): 서버에서 이미 간격 집계됨, 그대로 사용
-        intradayData.forEach(d => {
-          if (!d.time) return
-          const [hh, mi] = d.time.split(':').map(Number)
-          if (d.open <= 0 || d.high <= 0 || d.low <= 0 || d.close <= 0) return
-          const ts = Math.floor(Date.UTC(yyyy, mm, dd, hh, mi, 0) / 1000)
-          candleResult.push({ time: ts, open: d.open, high: d.high, low: d.low, close: d.close })
-          volumeResult.push({
-            time: ts,
-            value: d.volume || 0,
-            color: d.close >= d.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
-          })
-        })
-      }
+      })
     } else if (period === '1Y') {
       // 1년: 1주일 단위로 집계 (주봉)
       const sortedData = [...chartData].reverse()
@@ -531,12 +514,18 @@ function StockDetail() {
         })
       })
     } else {
-      // 3개월(3M): 1일 단위 (일봉 그대로)
+      // 1W / 1M / 3M: 일봉 데이터를 기간별로 필터링
+      const maxDays = { '1W': 7, '1M': 30, '3M': 100 }[period] || 100
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - maxDays)
+      const cutoffStr = cutoffDate.toISOString().slice(0, 10).replace(/-/g, '')
+
       const sortedData = [...chartData].reverse()
       const seenTimes = new Set()
 
       sortedData.forEach(d => {
         if (!d.date || d.date.length < 8) return
+        if (d.date < cutoffStr) return  // 기간 밖 데이터 제외
         const time = `${d.date.slice(0, 4)}-${d.date.slice(4, 6)}-${d.date.slice(6, 8)}`
         if (seenTimes.has(time)) return
         seenTimes.add(time)
