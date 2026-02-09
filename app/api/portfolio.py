@@ -1,11 +1,18 @@
 """포트폴리오 API 엔드포인트"""
 import asyncio
+from functools import partial
 from fastapi import APIRouter, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from typing import List
 from datetime import datetime
 import logging
+
+
+async def run_sync(func, *args, **kwargs):
+    """동기 함수를 스레드풀에서 실행 (이벤트루프 블로킹 방지)"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, partial(func, *args, **kwargs))
 
 from app.schemas.portfolio import (
     PortfolioSummary,
@@ -93,8 +100,8 @@ async def get_portfolio_balance(
 ):
     """계좌 잔고 및 포트폴리오 조회"""
     try:
-        # 2. KIS API 호출
-        result = client.get_balance()
+        # 2. KIS API 호출 (스레드풀에서 실행)
+        result = await run_sync(client.get_balance)
 
         if result.get("rt_cd") != "0":
             raise HTTPException(
@@ -150,7 +157,7 @@ async def get_stock_price(
 ):
     """주식 현재가 조회"""
     try:
-        result = client.get_stock_price(stock_code)
+        result = await run_sync(client.get_stock_price, stock_code)
 
         if result.get("rt_cd") != "0":
             raise HTTPException(
@@ -200,7 +207,7 @@ async def get_stock_detail(
                     pass
 
         # 1. 현재가 정보 조회
-        price_result = client.get_stock_price(stock_code)
+        price_result = await run_sync(client.get_stock_price, stock_code)
         if price_result.get("rt_cd") != "0":
             raise HTTPException(
                 status_code=400,
@@ -226,7 +233,7 @@ async def get_stock_detail(
         )
         
         # 2. 차트 데이터 조회 (항상 일봉, 표시 범위는 프론트에서 제어)
-        chart_result = client.get_daily_chart(stock_code, period="D", count=100)
+        chart_result = await run_sync(client.get_daily_chart, stock_code, period="D", count=100)
         chart_data = []
 
         if chart_result.get("rt_cd") == "0":
@@ -253,7 +260,7 @@ async def get_stock_detail(
             if output2:
                 logger.info(f"First chart item keys: {list(output2[0].keys())}")
                 logger.info(f"First chart item sample: stck_clpr={output2[0].get('stck_clpr')}, stck_oprc={output2[0].get('stck_oprc')}")
-            pred_result = predictor.predict_price(stock_code, stock_name, output2)
+            pred_result = await run_sync(predictor.predict_price, stock_code, stock_name, output2)
             logger.info(f"Prediction result: current={pred_result.get('current_price')}, predicted={pred_result.get('predicted_price')}")
             prediction_data = PredictionResult(**pred_result)
 
@@ -299,7 +306,7 @@ async def get_stock_intraday(
                 except Exception:
                     pass
 
-        result = client.get_minute_chart(stock_code, interval=interval)
+        result = await run_sync(client.get_minute_chart, stock_code, interval=interval)
         if result.get("rt_cd") != "0":
             raise HTTPException(
                 status_code=400,
@@ -356,7 +363,8 @@ async def buy_stock(
 ):
     """주식 매수"""
     try:
-        result = client.buy_stock(
+        result = await run_sync(
+            client.buy_stock,
             stock_code=order.stock_code,
             quantity=order.quantity,
             price=order.price,
@@ -396,7 +404,8 @@ async def sell_stock(
 ):
     """주식 매도"""
     try:
-        result = client.sell_stock(
+        result = await run_sync(
+            client.sell_stock,
             stock_code=order.stock_code,
             quantity=order.quantity,
             price=order.price,
@@ -435,7 +444,7 @@ async def get_order_history(
 ):
     """주문 내역 조회"""
     try:
-        result = client.get_order_history()
+        result = await run_sync(client.get_order_history)
 
         if result.get("rt_cd") != "0":
             raise HTTPException(
@@ -488,7 +497,7 @@ async def get_market_cap_stocks(
                     pass
 
         # 2. KIS API 호출 (시가총액 순위)
-        result = client.get_market_cap_ranking(top_n=limit)
+        result = await run_sync(client.get_market_cap_ranking, top_n=limit)
 
         if result.get("rt_cd") != "0":
             raise HTTPException(
@@ -547,7 +556,7 @@ async def get_top_stocks(
                     pass
 
         # 2. KIS API 호출 (거래량 순위)
-        result = client.get_volume_ranking()
+        result = await run_sync(client.get_volume_ranking)
 
         if result.get("rt_cd") != "0":
             raise HTTPException(
@@ -606,7 +615,7 @@ async def get_fluctuation_stocks(
                     pass
 
         # 2. KIS API 호출 (등락률 순위)
-        result = client.get_fluctuation_ranking(top_n=limit, sort_code=sort)
+        result = await run_sync(client.get_fluctuation_ranking, top_n=limit, sort_code=sort)
 
         if result.get("rt_cd") != "0":
             raise HTTPException(
@@ -704,7 +713,7 @@ async def ws_balance(websocket: WebSocket):
     logger.info("WebSocket balance client connected")
     try:
         while True:
-            data = _fetch_balance_data()
+            data = await run_sync(_fetch_balance_data)
             if data:
                 await websocket.send_json(data)
             await asyncio.sleep(5)
