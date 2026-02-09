@@ -1,5 +1,5 @@
 # 백엔드 Dockerfile
-FROM python:3.11-slim
+FROM python:3.11-slim AS builder
 
 # 작업 디렉토리 설정
 WORKDIR /app
@@ -15,9 +15,13 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Python 패키지 설치
-RUN pip install -r requirements.txt
+RUN pip install --prefix=/install -r requirements.txt
+
+FROM python:3.11-slim
+WORKDIR /app
 
 # 애플리케이션 코드 복사
+COPY --from=builder /install /usr/local
 COPY . .
 
 # 모델 및 데이터 디렉토리 생성
@@ -28,6 +32,7 @@ EXPOSE 8000
 
 # 환경 변수 설정
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 # 애플리케이션 실행
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-keep-alive", "30", "--no-access-log"]
