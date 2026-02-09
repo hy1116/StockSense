@@ -394,6 +394,8 @@ function StockDetail() {
 
     if (isIntraday) {
       // 분봉 모드: 시간 기반 (HH:MM → Unix timestamp)
+      // lightweight-charts는 UTC 기준으로 시간을 표시하므로,
+      // KST 시간이 정확히 표시되도록 UTC 기준 timestamp를 생성
       const today = new Date()
       const yyyy = today.getFullYear()
       const mm = today.getMonth()
@@ -402,7 +404,8 @@ function StockDetail() {
       intradayData.forEach(d => {
         if (!d.time) return
         const [hh, mi] = d.time.split(':').map(Number)
-        const ts = Math.floor(new Date(yyyy, mm, dd, hh, mi, 0).getTime() / 1000)
+        // Date.UTC로 생성하여 chart가 UTC로 해석할 때 KST 시간이 그대로 표시되도록 함
+        const ts = Math.floor(Date.UTC(yyyy, mm, dd, hh, mi, 0) / 1000)
 
         if (d.open > 0 && d.high > 0 && d.low > 0 && d.close > 0) {
           candleResult.push({
@@ -508,14 +511,28 @@ function StockDetail() {
     return currentTime >= 900 && currentTime <= 1530
   }
 
-  // 주기적 데이터 갱신
+  // 분봉 데이터 조회
+  const fetchIntraday = async () => {
+    try {
+      const data = await getStockIntraday(symbol)
+      setIntradayData(data)
+    } catch (err) {
+      console.error('분봉 데이터 조회 실패:', err)
+    }
+  }
+
+  // 주기적 데이터 갱신 (30초 간격)
   useEffect(() => {
     fetchStockDetail(true)
 
     if (isMarketOpen()) {
       autoRefreshIntervalRef.current = setInterval(() => {
         fetchStockDetail(false)
-      }, 3000)
+        // 1일 차트 선택 중이면 분봉 데이터도 함께 갱신
+        if (period === '1D') {
+          fetchIntraday()
+        }
+      }, 30000)
     }
 
     return () => {
@@ -523,7 +540,7 @@ function StockDetail() {
         clearInterval(autoRefreshIntervalRef.current)
       }
     }
-  }, [symbol])
+  }, [symbol, period])
 
   // 뉴스, 댓글, 적중률 로드
   useEffect(() => {
