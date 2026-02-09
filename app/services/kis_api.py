@@ -320,36 +320,79 @@ class KISAPIClient:
             raise Exception(f"차트 데이터 조회 실패: {response.text}")
 
     def get_minute_chart(self, stock_code: str) -> Dict:
-        """주식 당일 분봉 조회
+        """주식 당일 분봉 조회 (페이징으로 전체 장중 데이터 수집)
 
         Args:
             stock_code: 종목코드 (6자리)
 
         Returns:
-            당일 분봉 데이터 (1분 단위)
+            당일 분봉 데이터 (09:00 ~ 현재시간, 1분 단위)
         """
+        import time as _time
+
         tr_id = "FHKST03010200"
         url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
 
-        headers = self._get_headers(tr_id)
-        params = {
-            "FID_COND_MRKT_DIV_CODE": "J",
-            "FID_INPUT_ISCD": stock_code,
-            "FID_INPUT_HOUR_1": "153000",
-            "FID_PW_DATA_INCU_YN": "Y",
-            "FID_ETC_CLS_CODE": ""
+        all_output2 = []
+        last_output1 = {}
+        query_hour = "153000"  # 15:30부터 역순 조회 시작
+        max_pages = 14  # 최대 14페이지 (30분 × 14 = 420분 > 390분)
+
+        for page in range(max_pages):
+            headers = self._get_headers(tr_id)
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_INPUT_ISCD": stock_code,
+                "FID_INPUT_HOUR_1": query_hour,
+                "FID_PW_DATA_INCU_YN": "Y",
+                "FID_ETC_CLS_CODE": ""
+            }
+
+            self._log_request("GET", url, headers, params=params)
+            response = self.session.get(url, headers=headers, params=params, timeout=self._default_timeout)
+
+            if response.status_code != 200:
+                if page == 0:
+                    raise Exception(f"분봉 데이터 조회 실패: {response.text}")
+                break
+
+            result = response.json()
+            self._log_response("GET", url, response.status_code, result)
+
+            if result.get("rt_cd") != "0":
+                if page == 0:
+                    return result  # 첫 페이지 실패 시 에러 그대로 반환
+                break
+
+            output2 = result.get("output2", [])
+            if page == 0:
+                last_output1 = result.get("output1", {})
+
+            if not output2:
+                break
+
+            all_output2.extend(output2)
+
+            # 마지막 데이터의 시간을 다음 조회 기준으로 사용
+            last_time = output2[-1].get("stck_cntg_hour", "")
+            if not last_time or len(last_time) < 4:
+                break
+
+            # 09:00 이전 데이터까지 받았으면 종료
+            if last_time <= "090000":
+                break
+
+            # 다음 페이지: 마지막 데이터 시간을 기준으로 조회
+            query_hour = last_time
+
+            # API 호출 간격 (초당 20회 제한 고려)
+            _time.sleep(0.08)
+
+        return {
+            "rt_cd": "0",
+            "output1": last_output1,
+            "output2": all_output2
         }
-
-        self._log_request("GET", url, headers, params=params)
-        response = self.session.get(url, headers=headers, params=params, timeout=self._default_timeout)
-
-        result = response.json() if response.status_code == 200 else {"error": response.text}
-        self._log_response("GET", url, response.status_code, result)
-
-        if response.status_code == 200:
-            return result
-        else:
-            raise Exception(f"분봉 데이터 조회 실패: {response.text}")
 
     def get_volume_ranking(self) -> Dict:
         """거래량 순위 조회
