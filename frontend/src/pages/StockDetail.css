@@ -47,7 +47,43 @@
 }
 
 .sd-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 0.75rem;
+}
+
+/* ===== Watchlist Star Button ===== */
+.sd-watchlist-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.sd-watchlist-btn:hover {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.sd-watchlist-btn.active {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.sd-watchlist-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .sd-name-area {
@@ -1255,6 +1291,20 @@
   .sd-market-badge {
     background: rgba(100, 108, 255, 0.1);
     color: #4f46e5;
+  }
+
+  .sd-watchlist-btn {
+    color: rgba(17, 24, 39, 0.3);
+    border-color: rgba(17, 24, 39, 0.1);
+  }
+  .sd-watchlist-btn:hover {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.3);
+    background: rgba(245, 158, 11, 0.08);
+  }
+  .sd-watchlist-btn.active {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.3);
   }
 
   .sd-current-price { color: #111827; }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { getHealthCheck, getTopStocks, getMarketCapStocks, getFluctuationStocks, getPortfolio, searchStocks } from '../services/api'
+import { getHealthCheck, getTopStocks, getMarketCapStocks, getFluctuationStocks, getPortfolio, searchStocks, getWatchlist } from '../services/api'
 import useBalanceWebSocket from '../hooks/useBalanceWebSocket'
 import './Home.css'
 
@@ -56,6 +56,14 @@ function Home() {
     queryFn: () => getFluctuationStocks(20, 1),
     refetchInterval: 60000,
     enabled: activeTab === 'fluctuation_desc',
+  })
+
+  // 관심종목
+  const { data: watchlistData, isLoading: isLoadingWatchlist } = useQuery({
+    queryKey: ['watchlist'],
+    queryFn: getWatchlist,
+    refetchInterval: 60000,
+    enabled: isLoggedIn && activeTab === 'watchlist',
   })
 
   // WebSocket 실시간 잔고
@@ -279,6 +287,14 @@ function Home() {
                 보유 종목
               </button>
             )}
+            {isLoggedIn && (
+              <button
+                className={`tab-button ${activeTab === 'watchlist' ? 'active' : ''}`}
+                onClick={() => handleTabChange('watchlist')}
+              >
+                관심종목
+              </button>
+            )}
             <button
               className={`tab-button ${activeTab === 'marketCap' ? 'active' : ''}`}
               onClick={() => handleTabChange('marketCap')}
@@ -460,6 +476,53 @@ function Home() {
               <div className="empty-icon">📭</div>
               <p>보유 종목이 없습니다</p>
               <Link to="/portfolio" className="go-trade-btn">주문하러 가기</Link>
+            </div>
+          )
+        )}
+
+        {/* 관심종목 탭 - 로그인 상태에서만 표시 */}
+        {isLoggedIn && activeTab === 'watchlist' && (
+          isLoadingWatchlist ? (
+            <div className="loading">관심종목을 불러오는 중...</div>
+          ) : watchlistData?.items && watchlistData.items.length > 0 ? (
+            <div className="stock-list">
+              <div className="stock-list-header">
+                <span className="col-rank">No.</span>
+                <span className="col-name">종목명</span>
+                <span className="col-price">현재가</span>
+                <span className="col-change">등락률</span>
+              </div>
+              {watchlistData.items.map((item, index) => (
+                <Link
+                  key={item.stock_code}
+                  to={`/stock/${item.stock_code}`}
+                  className="stock-list-item"
+                >
+                  <span className="col-rank">
+                    <span className="rank-badge">{index + 1}</span>
+                  </span>
+                  <span className="col-name">
+                    <span className="stock-name">{item.stock_name}</span>
+                    <span className="stock-code">{item.stock_code}</span>
+                  </span>
+                  <span className="col-price">
+                    {item.current_price ? formatNumber(item.current_price) + '원' : '-'}
+                  </span>
+                  <span className={`col-change ${getPriceChangeClass(item.change_rate)}`}>
+                    {item.change_rate != null
+                      ? `${item.change_rate > 0 ? '+' : ''}${item.change_rate.toFixed(2)}%`
+                      : '-'}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-holdings">
+              <div className="empty-icon">{'\u2606'}</div>
+              <p>관심종목이 없습니다</p>
+              <p style={{fontSize: '0.8rem', color: 'rgba(255,255,255,0.3)', marginTop: '0.5rem'}}>
+                종목 상세에서 ☆ 버튼을 눌러 추가해보세요
+              </p>
             </div>
           )
         )}

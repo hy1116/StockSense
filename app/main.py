@@ -10,7 +10,7 @@ import logging
 
 from h11 import Request
 
-from app.api import portfolio, prediction, auth, comment, ml_model, news
+from app.api import portfolio, prediction, auth, comment, ml_model, news, watchlist
 from app.database import init_db, close_db
 from app.config import get_settings
 
@@ -125,6 +125,7 @@ app.include_router(prediction.router)
 app.include_router(comment.router)
 app.include_router(ml_model.router)
 app.include_router(news.router)
+app.include_router(watchlist.router)
 
 
 @app.get("/")

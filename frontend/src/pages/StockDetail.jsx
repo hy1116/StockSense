@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { getStockDetail, getStockIntraday, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock, getPredictionAccuracy } from '../services/api'
+import { getStockDetail, getStockIntraday, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock, getPredictionAccuracy, checkWatchlist, addToWatchlist, removeFromWatchlist } from '../services/api'
 import { createChart } from 'lightweight-charts'
 import './StockDetail.css'
 
@@ -37,6 +37,10 @@ function StockDetail() {
   // 적중률 관련 state
   const [accuracy, setAccuracy] = useState(null)
   const [accuracyLoading, setAccuracyLoading] = useState(false)
+
+  // 관심종목 관련 state
+  const [isWatchlisted, setIsWatchlisted] = useState(false)
+  const [watchlistLoading, setWatchlistLoading] = useState(false)
 
   // 주문 관련 state
   const [tradeTab, setTradeTab] = useState('buy')
@@ -212,6 +216,39 @@ function StockDetail() {
       console.error('Error fetching accuracy:', err)
     } finally {
       setAccuracyLoading(false)
+    }
+  }
+
+  // 관심종목 상태 확인
+  const fetchWatchlistStatus = async () => {
+    if (!isLoggedIn) return
+    try {
+      const data = await checkWatchlist(symbol)
+      setIsWatchlisted(data.is_watchlisted)
+    } catch (err) {
+      console.error('Error checking watchlist:', err)
+    }
+  }
+
+  // 관심종목 토글
+  const handleToggleWatchlist = async () => {
+    if (!isLoggedIn || watchlistLoading) return
+    setWatchlistLoading(true)
+    try {
+      if (isWatchlisted) {
+        await removeFromWatchlist(symbol)
+        setIsWatchlisted(false)
+      } else {
+        const { basic_info } = stockData
+        await addToWatchlist(symbol, basic_info.stock_name, basic_info.market)
+        setIsWatchlisted(true)
+      }
+      // 홈 관심종목 탭 캐시 갱신
+      queryClient.invalidateQueries(['watchlist'])
+    } catch (err) {
+      alert(err.response?.data?.detail || '관심종목 처리에 실패했습니다')
+    } finally {
+      setWatchlistLoading(false)
     }
   }
 
@@ -542,14 +579,15 @@ function StockDetail() {
     }
   }, [symbol, period])
 
-  // 뉴스, 댓글, 적중률 로드
+  // 뉴스, 댓글, 적중률, 관심종목 로드
   useEffect(() => {
     if (symbol) {
       fetchComments(1)
       fetchNews(1)
       fetchAccuracy()
+      fetchWatchlistStatus()
     }
-  }, [symbol])
+  }, [symbol, isLoggedIn])
 
   // 현재가를 주문 가격에 동기화
   useEffect(() => {
@@ -604,6 +642,16 @@ function StockDetail() {
               <span className="sd-market-badge">{basic_info.market}</span>
             </div>
           </div>
+          {isLoggedIn && (
+            <button
+              className={`sd-watchlist-btn ${isWatchlisted ? 'active' : ''}`}
+              onClick={handleToggleWatchlist}
+              disabled={watchlistLoading}
+              title={isWatchlisted ? '관심종목 해제' : '관심종목 등록'}
+            >
+              {isWatchlisted ? '\u2605' : '\u2606'}
+            </button>
+          )}
         </div>
         <div className="sd-price-area">
           <span className={`sd-current-price ${getPriceChangeClass(basic_info.change_price)}`}>

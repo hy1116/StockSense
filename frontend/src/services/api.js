@@ -242,4 +242,29 @@ export const getNewsSentimentStats = async (stockCode, days = 7) => {
   return response.data
 }
 
+// ===== Watchlist API =====
+
+export const getWatchlist = async () => {
+  const response = await api.get('/api/watchlist/')
+  return response.data
+}
+
+export const addToWatchlist = async (stockCode, stockName, market) => {
+  const response = await api.post(`/api/watchlist/${stockCode}`, {
+    stock_name: stockName,
+    market: market
+  })
+  return response.data
+}
+
+export const removeFromWatchlist = async (stockCode) => {
+  const response = await api.delete(`/api/watchlist/${stockCode}`)
+  return response.data
+}
+
+export const checkWatchlist = async (stockCode) => {
+  const response = await api.get(`/api/watchlist/check/${stockCode}`)
+  return response.data
+}
+
 export default api
