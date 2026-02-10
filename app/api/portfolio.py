@@ -202,9 +202,15 @@ async def get_stock_detail(
             if cached_data:
                 try:
                     cached_dict = json.loads(cached_data)
+                    logger.info(f"✅ [CACHE HIT] Stock detail for {stock_code} (period={period})")
                     return StockDetailInfo(**cached_dict)
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"⚠️ [CACHE PARSE ERROR] Failed to parse cached stock detail: {e}")
                     pass
+            else:
+                logger.info(f"❌ [CACHE MISS] Stock detail for {stock_code} (period={period}) - Fetching from API")
+        else:
+            logger.warning(f"⚠️ [REDIS UNAVAILABLE] Fetching stock detail from API for {stock_code}")
 
         # 1. 현재가 정보 조회
         price_result = await run_sync(client.get_stock_price, stock_code)
@@ -276,9 +282,12 @@ async def get_stock_detail(
             try:
                 cache_data = json.dumps(detail_info.model_dump())
                 redis.set(cache_key, cache_data, expire=600)
-            except Exception:
+                logger.info(f"💾 [CACHE SAVED] Stock detail for {stock_code} (period={period}) cached for 10 min")
+            except Exception as e:
+                logger.error(f"❌ [CACHE SAVE ERROR] Failed to cache stock detail: {e}")
                 pass
 
+        logger.info(f"✅ [API SUCCESS] Returning stock detail for {stock_code} with {len(chart_data)} candles")
         return detail_info
 
     except Exception as e:
@@ -302,9 +311,15 @@ async def get_stock_intraday(
             if cached_data:
                 try:
                     cached_list = json.loads(cached_data)
+                    logger.info(f"✅ [CACHE HIT] Intraday data for {stock_code} (interval={interval}) - {len(cached_list)} candles")
                     return [MinuteChartData(**item) for item in cached_list]
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"⚠️ [CACHE PARSE ERROR] Failed to parse cached intraday data: {e}")
                     pass
+            else:
+                logger.info(f"❌ [CACHE MISS] Intraday data for {stock_code} (interval={interval}) - Fetching from API")
+        else:
+            logger.warning(f"⚠️ [REDIS UNAVAILABLE] Fetching intraday data from API for {stock_code}")
 
         result = await run_sync(client.get_minute_chart, stock_code, interval=interval)
         if result.get("rt_cd") != "0":
@@ -344,9 +359,12 @@ async def get_stock_intraday(
             try:
                 cache_data = json.dumps([item.model_dump() for item in chart_data])
                 redis.set(cache_key, cache_data, expire=600)
-            except Exception:
+                logger.info(f"💾 [CACHE SAVED] Intraday data for {stock_code} (interval={interval}) - {len(chart_data)} candles cached for 10 min")
+            except Exception as e:
+                logger.error(f"❌ [CACHE SAVE ERROR] Failed to cache intraday data: {e}")
                 pass
 
+        logger.info(f"✅ [API SUCCESS] Returning {len(chart_data)} intraday candles for {stock_code}")
         return chart_data
 
     except HTTPException:
@@ -651,4 +669,5 @@ async def get_fluctuation_stocks(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 

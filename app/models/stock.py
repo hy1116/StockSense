@@ -60,10 +60,17 @@ class Prediction(Base):
     model_name = Column(String(50))  # 사용한 모델명
     features = Column(Text)  # JSON 형태로 저장된 특징값
 
+    # 예측 평가용 컬럼
+    actual_price = Column(Float, nullable=True)  # 실제 종가
+    error_rate = Column(Float, nullable=True)  # 오차율 (%)
+    direction_correct = Column(Boolean, nullable=True)  # 방향 적중 여부
+    is_evaluated = Column(Boolean, default=False, nullable=False)  # 평가 완료 여부
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index('idx_prediction_stock_date', 'stock_code', 'prediction_date'),
+        Index('idx_prediction_is_evaluated', 'is_evaluated'),
     )
 
 
