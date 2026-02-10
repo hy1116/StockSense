@@ -604,6 +604,11 @@ function StockDetail() {
   useEffect(() => {
     fetchStockDetail(true)
 
+    // 1D, 1W, 1M은 분봉 데이터 필요 - 초기 로딩 시 즉시 가져오기
+    if (['1D', '1W', '1M'].includes(period)) {
+      fetchIntraday()
+    }
+
     if (isMarketOpen()) {
       autoRefreshIntervalRef.current = setInterval(() => {
         fetchStockDetail(false)

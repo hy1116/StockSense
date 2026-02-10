@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getHealthCheck, getTopStocks, getMarketCapStocks, getFluctuationStocks, getPortfolio, searchStocks, getWatchlist } from '../services/api'
@@ -7,6 +7,7 @@ import './Home.css'
 
 function Home() {
   const { isLoggedIn } = useAuth();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -160,6 +161,11 @@ function Home() {
     setSearchTerm('')
   }
 
+  // 포트폴리오 새로고침 핸들러
+  const handleRefreshPortfolio = () => {
+    queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+  }
+
   // 1. 데이터와 로딩 상태를 객체에 담기
   const stockDataMap = {
     volume: topStocksData?.stocks,
@@ -187,9 +193,18 @@ function Home() {
         <section className="asset-hero">
           <div className="asset-hero-main">
             <span className="asset-hero-label">보유주식</span>
-            <span className="asset-hero-price">
-              {formatNumber(portfolio.total_asset)}<span className="asset-hero-unit">원</span>
-            </span>
+            <div className="asset-hero-price-row">
+              <span className="asset-hero-price">
+                {formatNumber(portfolio.total_asset)}<span className="asset-hero-unit">원</span>
+              </span>
+              <button
+                className="refresh-button"
+                onClick={handleRefreshPortfolio}
+                title="새로고침"
+              >
+                &#x21bb;
+              </button>
+            </div>
             <div className={`asset-hero-change ${getPriceChangeClass(portfolio.total_profit_rate)}`}>
               {portfolio.total_profit_rate > 0 ? '+' : ''}{portfolio.total_profit_rate.toFixed(2)}%
               {' '}({portfolio.total_profit_loss > 0 ? '+' : ''}{formatNumber(portfolio.total_profit_loss)}원)
