@@ -8,7 +8,7 @@ from sqlalchemy import select, func as sa_func, text
 
 from app.services.kis_api import get_kis_client, KISAPIClient
 from app.services.prediction import get_prediction_service, PredictionService, _get_sync_db
-from app.models.prediction import Prediction
+# from app.models.prediction import Prediction
 from app.schemas.portfolio import PredictionAccuracyResponse, PredictionHistoryItem
 
 logger = logging.getLogger(__name__)

@@ -13,7 +13,7 @@ function StockDetail() {
   const [stockData, setStockData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [period, setPeriod] = useState('3M')
+  const [period, setPeriod] = useState('1D')
   const [intradayData, setIntradayData] = useState(null)
 
   // 댓글 관련 state

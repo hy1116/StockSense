@@ -67,7 +67,7 @@ class StockRepository:
         market: str = None,
         priority: int = 0,
         description: str = None,
-        is_active: bool = True,
+        is_active: bool = False,
     ) -> bool:
         """종목 추가/업데이트
 
@@ -223,7 +223,7 @@ class StockRepository:
                         desc = f"시가총액 {i+1}위"
 
                     if stock_code not in added_codes:
-                        if self.add_stock(stock_code, stock_name, market, priority, desc):
+                        if self.add_stock(stock_code, stock_name, market, priority, desc, is_active=True):
                             added_codes.add(stock_code)
                             market_cap_count += 1
                             print(f"  ✅ [시총] {stock_code} - {stock_name} ({market})")
@@ -245,7 +245,7 @@ class StockRepository:
                     if stock_code not in added_codes:
                         priority = 50 - i  # 거래량 상위는 낮은 우선순위
                         desc = f"거래량 {i+1}위"
-                        if self.add_stock(stock_code, stock_name, market, priority, desc):
+                        if self.add_stock(stock_code, stock_name, market, priority, desc, is_active=True):
                             added_codes.add(stock_code)
                             volume_count += 1
                             print(f"  ✅ [거래량] {stock_code} - {stock_name} ({market})")
@@ -291,7 +291,7 @@ class StockRepository:
 
         count = 0
         for code, name, market, priority, desc in default_stocks:
-            if self.add_stock(code, name, market, priority, desc):
+            if self.add_stock(code, name, market, priority, desc, is_active=True):
                 count += 1
                 print(f"✅ Added (fallback): {code} - {name}")
 

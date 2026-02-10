@@ -1,5 +1,5 @@
 """주식 관련 데이터베이스 모델"""
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, Index
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, Index, BigInteger
 from sqlalchemy.sql import func
 from datetime import datetime
 
@@ -7,25 +7,37 @@ from app.database import Base
 
 
 class Stock(Base):
-    """종목 기본 정보 (검색 + 수집 대상 통합)"""
+    """종목 기본 정보 (전체 상장 종목 + 수집 대상 관리)"""
     __tablename__ = "stocks"
 
     id = Column(Integer, primary_key=True, index=True)
     stock_code = Column(String(10), unique=True, nullable=False, index=True)
-    stock_name = Column(String(100), nullable=False)
-    market = Column(String(20))  # KOSPI, KOSDAQ
-    sector = Column(String(50))  # 섹터
-    industry = Column(String(50))  # 업종
-    is_active = Column(Boolean, default=True, nullable=False)  # 수집 활성화 여부
+    stock_name = Column(String(100), nullable=False, index=True)
+
+    # 상장 정보 (KRX 파일)
+    market = Column(String(20))  # KOSPI, KOSDAQ, KONEX
+    sector = Column(String(100))  # 업종
+    industry = Column(String(100))  # 업종 세부
+
+    # 기업 정보 (선택적)
+    listing_date = Column(String(10))  # 상장일 (YYYY-MM-DD)
+    par_value = Column(Integer)  # 액면가
+    listed_shares = Column(BigInteger)  # 상장주식수
+
+    # 수집 관리 (기본값 False로 변경 - 새로 추가되는 종목은 비활성)
+    is_active = Column(Boolean, default=False, nullable=False)  # 수집 활성화 여부
     priority = Column(Integer, default=0)  # 우선순위 (높을수록 먼저)
-    description = Column(String(200))  # 설명 (예: 시가총액 상위)
+    category = Column(String(50))  # 시가총액TOP, 거래량TOP 등
+    description = Column(String(200))  # 메모
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     __table_args__ = (
         Index('idx_stock_code', 'stock_code'),
+        Index('idx_stock_name', 'stock_name'),
         Index('idx_stock_active', 'is_active'),
+        Index('idx_stock_market', 'market'),
     )
 
 
