@@ -46,6 +46,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:1234@postgres:5432/stocksense
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092  # 컨테이너 내부 통신용
     ports:
       - "8000:8000"
     volumes:
@@ -55,6 +56,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     restart: unless-stopped
 
@@ -82,6 +85,50 @@ services:
     profiles:
       - ml
 
+  # Kafka (KRaft 모드 - Zookeeper 없음)
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: stocksense-kafka
+    ports:
+      - "9092:9092"   # 호스트(로컬 개발)에서 접근
+      - "29092:29092" # Docker 내부 컨테이너 간 통신
+    environment:
+      # KRaft 설정
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      # 리스너 설정 (EXTERNAL: 호스트용, INTERNAL: 컨테이너용)
+      - KAFKA_CFG_LISTENERS=EXTERNAL://:9092,INTERNAL://:29092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=EXTERNAL://localhost:9092,INTERNAL://kafka:29092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
+      # 토픽 자동 생성 허용 (개발 편의)
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_LOG_RETENTION_HOURS=24
+    volumes:
+      - kafka_data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # Kafka UI - 토픽/메시지 모니터링 (localhost:8989)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: stocksense-kafka-ui
+    ports:
+      - "8989:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=stocksense-local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
   # 프론트엔드 React + Nginx
   frontend:
     build:
@@ -98,4 +145,6 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  kafka_data:
     driver: local

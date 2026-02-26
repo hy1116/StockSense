@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import time
 from loguru import logger
@@ -11,8 +12,13 @@ import logging
 from h11 import Request
 
 from app.api import portfolio, prediction, auth, comment, ml_model, news, watchlist
+from app.api import price_alert
 from app.database import init_db, close_db
 from app.config import get_settings
+from app.services.kafka_client import close_kafka_producer
+from app.services.price_producer import run_price_producer
+from app.services.alert_consumer import run_alert_consumer
+from app.services.naver_finance import close_naver_finance_client
 
 logger.remove()
 logger.add(
@@ -86,13 +92,33 @@ for _logger_name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """애플리케이션 생명주기 관리"""
-    # 시작 시
+    # ── 시작 ──────────────────────────────────────
     logger.info("Starting StockSense API...")
     await init_db()
     logger.info("Database initialized")
+
+    # Kafka 백그라운드 태스크 시작
+    producer_task = asyncio.create_task(run_price_producer(), name="price-producer")
+    consumer_task = asyncio.create_task(run_alert_consumer(), name="alert-consumer")
+    logger.info("Kafka background tasks started (price-producer, alert-consumer)")
+
     yield
-    # 종료 시
+
+    # ── 종료 ──────────────────────────────────────
     logger.info("Shutting down StockSense API...")
+
+    # Kafka 태스크 취소
+    producer_task.cancel()
+    consumer_task.cancel()
+    await asyncio.gather(producer_task, consumer_task, return_exceptions=True)
+    logger.info("Kafka background tasks stopped")
+
+    # Kafka Producer 종료
+    await close_kafka_producer()
+
+    # 네이버 금융 HTTP 클라이언트 종료
+    await close_naver_finance_client()
+
     await close_db()
     logger.info("Database connection closed")
 
@@ -126,6 +152,7 @@ app.include_router(comment.router)
 app.include_router(ml_model.router)
 app.include_router(news.router)
 app.include_router(watchlist.router)
+app.include_router(price_alert.router)  # 주가 알림
 
 
 @app.get("/")

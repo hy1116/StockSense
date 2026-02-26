@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     # Session Configuration
     session_expire_seconds: int = 60 * 60 * 24  # 24시간
 
+    # Kafka Configuration
+    # 로컬 개발: localhost:9092 / Docker 컨테이너: kafka:29092
+    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_stock_price_topic: str = "stock-price"
+    kafka_alert_triggered_topic: str = "price-alert-triggered"
+    kafka_poll_interval_seconds: int = 10  # 주가 폴링 주기 (초)
+
     # CORS Configuration
     cors_origins: str = "https://stocksense.hypepia.com,http://localhost:3000"
 
