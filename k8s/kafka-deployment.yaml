@@ -1,0 +1,153 @@
+# ──────────────────────────────────────────────────────────────────
+# Kafka (KRaft 모드, 단일 브로커)
+#
+# 구성 요소:
+#   1. Headless Service  - kafka-0 Pod 고정 DNS (KRaft 컨트롤러 통신용)
+#   2. ClusterIP Service - 앱(backend)에서 kafka-service:9092로 접근
+#   3. StatefulSet       - Pod 이름/볼륨 고정 (kafka-0)
+#   4. PVC               - 메시지 영구 저장
+# ──────────────────────────────────────────────────────────────────
+
+# 1. Headless Service: kafka-0.kafka-headless.stocksense.svc.cluster.local
+#    KRaft 컨트롤러 쿼럼(CONTROLLER_QUORUM_VOTERS)에서 브로커 식별용
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-headless
+  namespace: stocksense
+  labels:
+    app: kafka
+spec:
+  clusterIP: None          # Headless = DNS로 Pod IP 직접 반환
+  selector:
+    app: kafka
+  ports:
+  - name: broker
+    port: 9092
+    targetPort: 9092
+  - name: controller
+    port: 9093
+    targetPort: 9093
+
+---
+
+# 2. ClusterIP Service: backend → kafka-service:9092 로 접근
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-service
+  namespace: stocksense
+  labels:
+    app: kafka
+spec:
+  selector:
+    app: kafka
+  ports:
+  - name: broker
+    port: 9092
+    targetPort: 9092
+  type: ClusterIP
+
+---
+
+# 3. StatefulSet: Pod 이름 kafka-0 고정, PVC 1:1 바인딩
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: stocksense
+spec:
+  serviceName: kafka-headless   # Headless Service와 연결
+  replicas: 1                   # 단일 브로커 (개발/소규모)
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+      - name: kafka
+        image: bitnami/kafka:3.7
+        ports:
+        - containerPort: 9092
+          name: broker
+        - containerPort: 9093
+          name: controller
+        env:
+        # KRaft 기본 설정
+        - name: KAFKA_CFG_NODE_ID
+          value: "0"
+        - name: KAFKA_CFG_PROCESS_ROLES
+          value: "controller,broker"
+
+        # 리스너 설정
+        # PLAINTEXT: 앱 접근용 / CONTROLLER: 브로커 간 KRaft 통신용
+        - name: KAFKA_CFG_LISTENERS
+          value: "PLAINTEXT://:9092,CONTROLLER://:9093"
+        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+        - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
+          value: "CONTROLLER"
+
+        # k8s 내부에서 접근하는 주소: Service 이름 사용
+        - name: KAFKA_CFG_ADVERTISED_LISTENERS
+          value: "PLAINTEXT://kafka-service:9092"
+
+        # KRaft 쿼럼: kafka-0 Pod의 Headless DNS로 컨트롤러 지정
+        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+          value: "0@kafka-0.kafka-headless.stocksense.svc.cluster.local:9093"
+
+        # 운영 설정
+        - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+          value: "true"
+        - name: KAFKA_CFG_LOG_RETENTION_HOURS
+          value: "24"
+        - name: KAFKA_CFG_LOG_SEGMENT_BYTES
+          value: "1073741824"  # 1GB
+
+        volumeMounts:
+        - name: kafka-storage
+          mountPath: /bitnami/kafka
+
+        # 준비 확인: 토픽 목록 조회 가능할 때 Ready
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "kafka-topics.sh --bootstrap-server localhost:9092 --list"
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          failureThreshold: 5
+
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "kafka-topics.sh --bootstrap-server localhost:9092 --list"
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          failureThreshold: 3
+
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+
+  # StatefulSet의 PVC 템플릿: Pod마다 자동으로 PVC 생성
+  volumeClaimTemplates:
+  - metadata:
+      name: kafka-storage
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 5Gi

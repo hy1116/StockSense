@@ -64,6 +64,11 @@ spec:
             secretKeyRef:
               name: stocksense-secret
               key: ENCRYPTION_KEY
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: stocksense-config
+              key: KAFKA_BOOTSTRAP_SERVERS
         volumeMounts:
         - name: models-storage
           mountPath: /app/models

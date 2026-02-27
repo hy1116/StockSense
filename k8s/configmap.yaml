@@ -9,3 +9,5 @@ data:
   DATABASE_URL: "postgresql+asyncpg://postgres:1234@postgres-service:5432/stocksense"
   POSTGRES_DB: "stocksense"
   POSTGRES_USER: "postgres"
+  # k8s 내부에서 Kafka 접근 주소 (ClusterIP Service 이름)
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-service:9092"
