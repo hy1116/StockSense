@@ -225,7 +225,7 @@
   border: none;
   background: transparent;
   color: rgba(255, 255, 255, 0.87);
-  font-size: 0.88rem;
+  font-size: 16px; /* iOS 자동 확대 방지: 16px 미만이면 포커스 시 줌 발생 */
 }
 
 .search-input:focus {
