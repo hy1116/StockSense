@@ -208,7 +208,7 @@ class PredictionService:
                 os.remove(tmp_path)
 
     def _get_default_feature_columns(self) -> list:
-        """기본 피처 컬럼 반환"""
+        """기본 피처 컬럼 반환 (26개: 기술적+뉴스+재무)"""
         return [
             'open', 'high', 'low', 'close', 'volume',
             'ma5', 'ma10', 'ma20', 'rsi',
@@ -216,7 +216,8 @@ class PredictionService:
             'macd', 'macd_signal', 'macd_diff',
             'price_change_1d', 'volume_change',
             'news_sentiment_avg', 'news_count',
-            'news_positive_ratio', 'news_negative_ratio'
+            'news_positive_ratio', 'news_negative_ratio',
+            'per', 'pbr', 'eps_normalized', 'div_yield', 'roe'
         ]
 
     def _load_ml_model_from_file(self):
@@ -329,6 +330,9 @@ class PredictionService:
             # 뉴스 감성 (details용 재사용 or 재조회)
             news_features = self._get_news_sentiment_features(stock_code)
 
+            # 재무 데이터 (details용)
+            fin_data = self._get_financial_features(stock_code)
+
             # 볼린저밴드 현재 위치 (0~1)
             bb_position = None
             if bb_upper != bb_lower and bb_upper > 0:
@@ -362,6 +366,16 @@ class PredictionService:
                     "count": int(news_features.get("news_count", 0)),
                     "positive_ratio": round(float(news_features.get("news_positive_ratio", 0)), 3),
                     "negative_ratio": round(float(news_features.get("news_negative_ratio", 0)), 3),
+                },
+                "financial_data": {
+                    "per": fin_data.get("per"),
+                    "pbr": fin_data.get("pbr"),
+                    "eps": fin_data.get("eps"),
+                    "div_yield": fin_data.get("div_yield"),
+                    "roe": fin_data.get("roe"),
+                    "revenue": fin_data.get("revenue"),
+                    "operating_profit": fin_data.get("operating_profit"),
+                    "net_profit": fin_data.get("net_profit"),
                 },
                 "recommendation_factors": factor_scores,
             }
@@ -438,6 +452,11 @@ class PredictionService:
                 'news_positive_ratio': 0.0, 'news_negative_ratio': 0.0
             }
 
+            fin = self._get_financial_features(stock_code) if stock_code else {
+                'per': 0.0, 'pbr': 0.0, 'eps': 0.0, 'div_yield': 0.0, 'roe': 0.0
+            }
+            eps_normalized = (fin['eps'] / current_price) if current_price > 0 and fin['eps'] else 0.0
+
             features_dict = {
                 'open': open_price,
                 'high': high_price,
@@ -456,7 +475,12 @@ class PredictionService:
                 'macd_diff': macd - signal,
                 'price_change_1d': price_change_1d,
                 'volume_change': volume_change,
-                **news_features
+                **news_features,
+                'per': fin['per'],
+                'pbr': fin['pbr'],
+                'eps_normalized': eps_normalized,
+                'div_yield': fin['div_yield'],
+                'roe': fin['roe'],
             }
 
             features = [features_dict.get(col, 0) for col in self.feature_columns]
@@ -570,6 +594,18 @@ class PredictionService:
             }
             for key, val in news_features.items():
                 df[key] = val
+
+            # 재무 피처 (전체 기간 동일값 사용, EPS는 행별 현재가로 계산)
+            fin = self._get_financial_features(stock_code) if stock_code else {
+                'per': 0.0, 'pbr': 0.0, 'eps': 0.0, 'div_yield': 0.0, 'roe': 0.0
+            }
+            df['per'] = fin['per']
+            df['pbr'] = fin['pbr']
+            df['eps_normalized'] = df['close'].apply(
+                lambda c: fin['eps'] / c if c > 0 and fin['eps'] else 0.0
+            )
+            df['div_yield'] = fin['div_yield']
+            df['roe'] = fin['roe']
 
             # NaN 제거
             df = df.dropna()
@@ -897,6 +933,47 @@ class PredictionService:
 
         except Exception as e:
             logger.warning(f"Failed to get news sentiment features: {e}")
+
+        return defaults
+
+    def _get_financial_features(self, stock_code: str) -> dict:
+        """DB에서 해당 종목의 최신 재무 데이터 조회"""
+        defaults = {
+            'per': 0.0, 'pbr': 0.0, 'eps': 0.0,
+            'div_yield': 0.0, 'roe': 0.0,
+            'revenue': None, 'operating_profit': None, 'net_profit': None,
+        }
+
+        try:
+            engine, _ = _get_sync_db()
+
+            query = text("""
+                SELECT per, pbr, eps, bps, div_yield, roe,
+                       revenue, operating_profit, net_profit
+                FROM stock_financials
+                WHERE stock_code = :stock_code
+                ORDER BY date DESC
+                LIMIT 1
+            """)
+
+            with engine.connect() as conn:
+                result = conn.execute(query, {"stock_code": stock_code})
+                row = result.fetchone()
+
+                if row:
+                    return {
+                        'per': float(row[0]) if row[0] is not None else 0.0,
+                        'pbr': float(row[1]) if row[1] is not None else 0.0,
+                        'eps': float(row[2]) if row[2] is not None else 0.0,
+                        'div_yield': float(row[4]) if row[4] is not None else 0.0,
+                        'roe': float(row[5]) if row[5] is not None else 0.0,
+                        'revenue': float(row[6]) if row[6] is not None else None,
+                        'operating_profit': float(row[7]) if row[7] is not None else None,
+                        'net_profit': float(row[8]) if row[8] is not None else None,
+                    }
+
+        except Exception as e:
+            logger.warning(f"Failed to get financial features: {e}")
 
         return defaults
 

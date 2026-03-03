@@ -112,3 +112,4 @@ win32_setctime==1.2.0
 wrapt==2.0.1
 yfinance==0.2.50
 xgboost>=2.0.0
+finance-datareader>=0.9.50

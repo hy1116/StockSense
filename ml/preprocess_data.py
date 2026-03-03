@@ -162,6 +162,81 @@ class DataPreprocessor:
             print(f"   ⚠️ Failed to load news sentiment: {e}")
             return None
 
+    def load_financial_data(self, stock_code: str) -> Optional[pd.DataFrame]:
+        """DB에서 종목별 재무 데이터 날짜순 조회"""
+        try:
+            from dotenv import load_dotenv
+            from sqlalchemy import create_engine, text
+
+            load_dotenv()
+            db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/stocksense")
+            db_url = db_url.replace("+asyncpg", "")
+            engine = create_engine(db_url)
+
+            query = text("""
+                SELECT date, per, pbr, eps, bps, div_yield, roe,
+                       revenue, operating_profit, net_profit
+                FROM stock_financials
+                WHERE stock_code = :stock_code
+                ORDER BY date
+            """)
+
+            df = pd.read_sql(query, engine, params={"stock_code": stock_code})
+
+            if df.empty:
+                print(f"   No financial data for {stock_code}")
+                return None
+
+            df["date"] = pd.to_datetime(df["date"])
+            print(f"   Loaded {len(df)} financial records")
+            return df
+
+        except Exception as e:
+            print(f"   ⚠️ Failed to load financial data: {e}")
+            return None
+
+    def merge_financial_features(self, df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
+        """재무 피처를 기술적 지표 DataFrame에 병합 (look-ahead bias 없이 forward-fill)"""
+        financial_cols = ['per', 'pbr', 'eps_normalized', 'div_yield', 'roe']
+
+        # 피처 컬럼 초기화 (재무 데이터 없어도 컬럼 존재 보장)
+        for col in financial_cols:
+            df[col] = 0.0
+
+        fin_df = self.load_financial_data(stock_code)
+
+        if fin_df is not None and not fin_df.empty:
+            # merge_asof: 날짜 기준 backward fill (look-ahead bias 없음)
+            df_sorted = df.copy()
+            df_sorted['date'] = pd.to_datetime(df_sorted['date'])
+            fin_df['date'] = pd.to_datetime(fin_df['date'])
+
+            merged = pd.merge_asof(
+                df_sorted.sort_values('date'),
+                fin_df[['date', 'per', 'pbr', 'eps', 'div_yield', 'roe']].sort_values('date'),
+                on='date',
+                direction='backward'
+            )
+
+            # EPS 정규화 (eps / close, 무차원 비율)
+            if 'eps' in merged.columns and 'close' in merged.columns:
+                merged['eps_normalized'] = merged.apply(
+                    lambda r: r['eps'] / r['close'] if r['close'] > 0 and r['eps'] == r['eps'] else 0.0,
+                    axis=1
+                )
+            else:
+                merged['eps_normalized'] = 0.0
+
+            # 병합 결과를 df에 반영
+            for col in ['per', 'pbr', 'div_yield', 'roe', 'eps_normalized']:
+                if col in merged.columns:
+                    df[col] = merged[col].fillna(0.0).values
+
+            merged_count = (df['per'] != 0).sum()
+            print(f"   Merged financial features: {merged_count} days with data")
+
+        return df
+
     def merge_news_features(self, df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
         """뉴스 감성 피처를 기술적 지표 DataFrame에 병합"""
         news_df = self.load_news_sentiment(stock_code)
@@ -215,6 +290,10 @@ class DataPreprocessor:
         # 3. 뉴스 감성 피처 병합
         df = self.merge_news_features(df, stock_code)
         print(f"   Merged news sentiment features")
+
+        # 3b. 재무 피처 병합
+        df = self.merge_financial_features(df, stock_code)
+        print(f"   Merged financial features")
 
         # 4. 타겟 생성
         df = self.create_target(df, days_ahead=1)

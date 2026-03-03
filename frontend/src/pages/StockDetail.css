@@ -56,7 +56,7 @@
 /* ===== Watchlist Star Button ===== */
 .sd-watchlist-btn {
   background: none;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: none;
   border-radius: 50%;
   width: 42px;
   height: 42px;
@@ -931,6 +931,26 @@
 .sd-detail-news-item .sd-detail-value {
   font-size: 0.9rem;
   font-weight: 700;
+}
+
+/* 재무 지표 힌트 */
+.sd-detail-hint {
+  font-size: 0.74rem;
+  font-weight: 600;
+  margin-left: auto;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+.hint-good {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+.hint-bad {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+.hint-neutral {
+  color: rgba(255, 255, 255, 0.4);
 }
 
 /* ===== Trade Section ===== */

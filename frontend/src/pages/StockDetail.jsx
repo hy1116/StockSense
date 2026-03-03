@@ -346,6 +346,15 @@ function StockDetail() {
     return '-'
   }
 
+  // 재무 금액 포맷 (억/조 단위)
+  const formatFinancialAmount = (val) => {
+    if (val === null || val === undefined) return '-'
+    const abs = Math.abs(val)
+    if (abs >= 10000) return `${(val / 10000).toFixed(1)}조`
+    if (abs >= 1) return `${val.toFixed(0)}억`
+    return `${val.toFixed(2)}억`
+  }
+
   // lightweight-charts 초기화
   const initChart = useCallback(() => {
     if (!chartContainerRef.current || !stockData) return
@@ -1160,6 +1169,103 @@ function StockDetail() {
                         </div>
                       </div>
                     )}
+
+                    {/* 재무 지표 */}
+                    {prediction.details.financial_data && (() => {
+                      const fd = prediction.details.financial_data
+                      const hasData = fd.per || fd.pbr || fd.roe || fd.div_yield || fd.eps || fd.revenue || fd.operating_profit || fd.net_profit
+                      if (!hasData) return null
+                      return (
+                        <div className="sd-detail-section">
+                          <h4 className="sd-detail-title">재무 지표</h4>
+                          <div className="sd-detail-content">
+                            <div className="sd-detail-group">
+                              <span className="sd-detail-group-label">밸류에이션</span>
+                              <div className="sd-detail-ind-list">
+                                {fd.per != null && fd.per !== 0 && (
+                                  <div className="sd-detail-ind-row">
+                                    <span className="sd-detail-ind-name">PER</span>
+                                    <span className="sd-detail-ind-val">{fd.per.toFixed(2)}배</span>
+                                    <span className={`sd-detail-hint ${fd.per < 10 ? 'hint-good' : fd.per > 30 ? 'hint-bad' : 'hint-neutral'}`}>
+                                      {fd.per < 10 ? '저평가' : fd.per > 30 ? '고평가' : '적정'}
+                                    </span>
+                                  </div>
+                                )}
+                                {fd.pbr != null && fd.pbr !== 0 && (
+                                  <div className="sd-detail-ind-row">
+                                    <span className="sd-detail-ind-name">PBR</span>
+                                    <span className="sd-detail-ind-val">{fd.pbr.toFixed(2)}배</span>
+                                    <span className={`sd-detail-hint ${fd.pbr < 1 ? 'hint-good' : fd.pbr > 3 ? 'hint-bad' : 'hint-neutral'}`}>
+                                      {fd.pbr < 1 ? '자산대비저평가' : fd.pbr > 3 ? '고평가' : '적정'}
+                                    </span>
+                                  </div>
+                                )}
+                                {fd.div_yield != null && fd.div_yield !== 0 && (
+                                  <div className="sd-detail-ind-row">
+                                    <span className="sd-detail-ind-name">배당수익률</span>
+                                    <span className="sd-detail-ind-val">{fd.div_yield.toFixed(2)}%</span>
+                                    <span className={`sd-detail-hint ${fd.div_yield >= 3 ? 'hint-good' : 'hint-neutral'}`}>
+                                      {fd.div_yield >= 3 ? '고배당' : ''}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="sd-detail-group">
+                              <span className="sd-detail-group-label">수익성</span>
+                              <div className="sd-detail-ind-list">
+                                {fd.roe != null && fd.roe !== 0 && (
+                                  <div className="sd-detail-ind-row">
+                                    <span className="sd-detail-ind-name">ROE</span>
+                                    <span className="sd-detail-ind-val">{fd.roe.toFixed(2)}%</span>
+                                    <span className={`sd-detail-hint ${fd.roe > 15 ? 'hint-good' : fd.roe < 5 ? 'hint-bad' : 'hint-neutral'}`}>
+                                      {fd.roe > 15 ? '우수' : fd.roe < 5 ? '낮음' : '보통'}
+                                    </span>
+                                  </div>
+                                )}
+                                {fd.eps != null && fd.eps !== 0 && (
+                                  <div className="sd-detail-ind-row">
+                                    <span className="sd-detail-ind-name">EPS</span>
+                                    <span className={`sd-detail-ind-val ${fd.eps < 0 ? 'price-down' : ''}`}>
+                                      {formatNumber(Math.round(fd.eps))}원
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {(fd.revenue != null || fd.operating_profit != null || fd.net_profit != null) && (
+                              <div className="sd-detail-group">
+                                <span className="sd-detail-group-label">실적 (억원)</span>
+                                <div className="sd-detail-ind-list">
+                                  {fd.revenue != null && (
+                                    <div className="sd-detail-ind-row">
+                                      <span className="sd-detail-ind-name">매출액</span>
+                                      <span className="sd-detail-ind-val">{formatFinancialAmount(fd.revenue)}</span>
+                                    </div>
+                                  )}
+                                  {fd.operating_profit != null && (
+                                    <div className="sd-detail-ind-row">
+                                      <span className="sd-detail-ind-name">영업이익</span>
+                                      <span className={`sd-detail-ind-val ${fd.operating_profit < 0 ? 'price-down' : ''}`}>
+                                        {formatFinancialAmount(fd.operating_profit)}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {fd.net_profit != null && (
+                                    <div className="sd-detail-ind-row">
+                                      <span className="sd-detail-ind-name">순이익</span>
+                                      <span className={`sd-detail-ind-val ${fd.net_profit < 0 ? 'price-down' : ''}`}>
+                                        {formatFinancialAmount(fd.net_profit)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                   </div>
                 )}
