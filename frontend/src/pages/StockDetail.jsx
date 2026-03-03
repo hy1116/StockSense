@@ -39,7 +39,7 @@ function StockDetail() {
   const [accuracyLoading, setAccuracyLoading] = useState(false)
 
   // AI 예측 상세 드롭다운
-  const [showPredDetails, setShowPredDetails] = useState(false)
+  const [showPredDetails, setShowPredDetails] = useState(true)
 
   // 관심종목 관련 state
   const [isWatchlisted, setIsWatchlisted] = useState(false)
