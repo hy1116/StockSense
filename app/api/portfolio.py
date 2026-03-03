@@ -11,7 +11,7 @@ import logging
 
 async def run_sync(func, *args, **kwargs):
     """동기 함수를 스레드풀에서 실행 (이벤트루프 블로킹 방지)"""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, partial(func, *args, **kwargs))
 
 from app.schemas.portfolio import (

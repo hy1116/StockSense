@@ -69,47 +69,56 @@ spec:
     spec:
       containers:
       - name: kafka
-        image: bitnami/kafka:3.7
+        # bitnami → apache/kafka 공식 이미지로 변경 (bitnami Docker Hub 배포 중단)
+        image: apache/kafka:3.8.0
         ports:
         - containerPort: 9092
           name: broker
         - containerPort: 9093
           name: controller
         env:
-        # KRaft 기본 설정
-        - name: KAFKA_CFG_NODE_ID
+        # KRaft 기본 설정 (apache/kafka는 KAFKA_CFG_ 없이 KAFKA_ prefix 사용)
+        - name: KAFKA_NODE_ID
           value: "0"
-        - name: KAFKA_CFG_PROCESS_ROLES
-          value: "controller,broker"
+        - name: KAFKA_PROCESS_ROLES
+          value: "broker,controller"
 
         # 리스너 설정
         # PLAINTEXT: 앱 접근용 / CONTROLLER: 브로커 간 KRaft 통신용
-        - name: KAFKA_CFG_LISTENERS
-          value: "PLAINTEXT://:9092,CONTROLLER://:9093"
-        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+        - name: KAFKA_LISTENERS
+          value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
           value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
-        - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
+        - name: KAFKA_CONTROLLER_LISTENER_NAMES
           value: "CONTROLLER"
 
-        # k8s 내부에서 접근하는 주소: Service 이름 사용
-        - name: KAFKA_CFG_ADVERTISED_LISTENERS
+        # k8s 내부에서 접근하는 주소: ClusterIP Service 이름 사용
+        - name: KAFKA_ADVERTISED_LISTENERS
           value: "PLAINTEXT://kafka-service:9092"
 
         # KRaft 쿼럼: kafka-0 Pod의 Headless DNS로 컨트롤러 지정
-        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
           value: "0@kafka-0.kafka-headless.stocksense.svc.cluster.local:9093"
 
+        # 단일 브로커 설정 (replication factor = 1)
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "1"
+
         # 운영 설정
-        - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
           value: "true"
-        - name: KAFKA_CFG_LOG_RETENTION_HOURS
+        - name: KAFKA_LOG_RETENTION_HOURS
           value: "24"
-        - name: KAFKA_CFG_LOG_SEGMENT_BYTES
-          value: "1073741824"  # 1GB
+        - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+          value: "0"
 
         volumeMounts:
         - name: kafka-storage
-          mountPath: /bitnami/kafka
+          mountPath: /var/lib/kafka/data  # apache/kafka 데이터 경로
 
         # 준비 확인: 토픽 목록 조회 가능할 때 Ready
         readinessProbe:
@@ -117,7 +126,7 @@ spec:
             command:
             - sh
             - -c
-            - "kafka-topics.sh --bootstrap-server localhost:9092 --list"
+            - "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"
           initialDelaySeconds: 30
           periodSeconds: 15
           failureThreshold: 5
@@ -127,7 +136,7 @@ spec:
             command:
             - sh
             - -c
-            - "kafka-topics.sh --bootstrap-server localhost:9092 --list"
+            - "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"
           initialDelaySeconds: 60
           periodSeconds: 20
           failureThreshold: 3

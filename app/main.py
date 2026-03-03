@@ -4,12 +4,10 @@ import time
 from loguru import logger
 from fastapi import FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.concurrency import iterate_in_threadpool
+from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
-
-from h11 import Request
 
 from app.api import portfolio, prediction, auth, comment, ml_model, news, watchlist
 from app.api import price_alert
@@ -28,40 +26,38 @@ logger.add(
     filter=lambda record: "/health" not in record["message"] # /health 포함 로그 전역 필터링
 )
 
+_REQ_BODY_MAX = 300  # 요청 바디 로그 최대 길이 (bytes)
+
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # WebSocket 및 Health 체크 스킵
         if request.url.path.startswith("/api/portfolio/ws/") or request.url.path == "/health":
             return await call_next(request)
-        
+
         start_time = time.time()
-        
-        # Request Body 처리 (주의: 큰 데이터의 경우 메모리 이슈가 있을 수 있음)
-        body = await request.body()
-        request_body = body.decode() if body else None
+
+        # 요청 바디: POST/PUT/PATCH 에만, 최대 300자로 잘라서 기록
+        request_body = None
+        if request.method in ("POST", "PUT", "PATCH"):
+            raw = await request.body()
+            if raw:
+                decoded = raw.decode(errors="replace")
+                request_body = decoded[:_REQ_BODY_MAX] + ("…" if len(decoded) > _REQ_BODY_MAX else "")
 
         response = await call_next(request)
 
-        # Response Body 복구 및 추출
         process_time = (time.time() - start_time) * 1000
-        response_body_bytes = [section async for section in response.body_iterator]
-        response.body_iterator = iterate_in_threadpool(iter(response_body_bytes))
-
         status_code = response.status_code
-        
-        # 로그 데이터 구성
-        # .opt(depth=1)을 사용하면 미들웨어가 아닌 실제 호출 지점을 찍을 수도 있지만, 
-        # 여기서는 미들웨어 라인이 찍히는 것이 정상입니다.
+
+        # 응답 바디는 읽지 않음 — 전체를 버퍼링하면 대용량 응답에서 심각한 지연 발생
         logger.bind(
             url=request.url.path,
             method=request.method,
-            status_code=status_code
+            status_code=status_code,
         ).info(
-            f"Request: {request.method} {request.url.path} | "
-            f"Status: {status_code} | "
-            f"Time: {process_time:.2f}ms | "
-            f"ReqBody: {request_body} | "
-            f"ResBody: {response_body_bytes[0].decode() if response_body_bytes else None}"
+            f"{request.method} {request.url.path} | "
+            f"{status_code} | {process_time:.0f}ms"
+            + (f" | body={request_body}" if request_body else "")
         )
 
         return response
@@ -88,6 +84,11 @@ for _logger_name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
     _uv_logger = logging.getLogger(_logger_name)
     _uv_logger.handlers = [InterceptHandler()]
     _uv_logger.propagate = False
+
+# 내부 라이브러리 로그 레벨 조정 (DEBUG/INFO 과다 출력 방지)
+logging.getLogger("aiokafka").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy").setLevel(logging.WARNING)          # 모든 sqlalchemy 서브로거 포함
+logging.getLogger("sqlalchemy.engine.Engine").setLevel(logging.WARNING)  # echo 직접 억제
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

@@ -1,6 +1,7 @@
 """주가 예측 API"""
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
+from typing import Optional
 import logging
 import sqlalchemy as sa
 
@@ -32,6 +33,7 @@ class PredictionResponse(BaseModel):
     confidence: float
     trend: str
     recommendation: str
+    details: Optional[dict] = None
 
 
 def _save_prediction_to_db(result: dict):

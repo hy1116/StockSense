@@ -21,20 +21,22 @@ _producer: Optional[AIOKafkaProducer] = None
 
 
 async def get_kafka_producer() -> AIOKafkaProducer:
-    """싱글톤 Producer 반환 (없으면 시작)"""
+    """싱글톤 Producer 반환 (없으면 시작)
+
+    start() 실패 시 _producer를 None으로 되돌려 다음 호출에서 재시도 가능하게 함.
+    """
     global _producer
     if _producer is None:
-        _producer = AIOKafkaProducer(
+        producer = AIOKafkaProducer(
             bootstrap_servers=settings.kafka_bootstrap_servers,
             value_serializer=lambda v: json.dumps(v, ensure_ascii=False).encode("utf-8"),
             key_serializer=lambda k: k.encode("utf-8") if k else None,
-            # 메시지 유실 방지: 모든 replica 확인 후 ack
             acks="all",
-            # 연결 재시도
             retry_backoff_ms=500,
             request_timeout_ms=30_000,
         )
-        await _producer.start()
+        await producer.start()  # 실패 시 예외 전파, _producer는 None 유지
+        _producer = producer
         logger.info(f"Kafka producer started → {settings.kafka_bootstrap_servers}")
     return _producer
 

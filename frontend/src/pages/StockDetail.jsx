@@ -38,6 +38,9 @@ function StockDetail() {
   const [accuracy, setAccuracy] = useState(null)
   const [accuracyLoading, setAccuracyLoading] = useState(false)
 
+  // AI 예측 상세 드롭다운
+  const [showPredDetails, setShowPredDetails] = useState(false)
+
   // 관심종목 관련 state
   const [isWatchlisted, setIsWatchlisted] = useState(false)
   const [watchlistLoading, setWatchlistLoading] = useState(false)
@@ -933,6 +936,236 @@ function StockDetail() {
                 </p>
               )}
             </div>
+            {/* 자세히 보기 */}
+            {prediction.details && (
+              <>
+                <button
+                  className={`sd-pred-details-btn ${showPredDetails ? 'active' : ''}`}
+                  onClick={() => setShowPredDetails(v => !v)}
+                >
+                  {showPredDetails ? '간략히 보기 ▲' : '자세히 보기 ▼'}
+                </button>
+
+                {showPredDetails && (
+                  <div className="sd-pred-details">
+
+                    {/* 사용 모델 */}
+                    <div className="sd-detail-section">
+                      <h4 className="sd-detail-title">사용 모델</h4>
+                      <div className="sd-detail-content">
+                        <div className="sd-detail-model-info">
+                          <span className="sd-detail-label">분석 방식</span>
+                          <span className="sd-detail-value">
+                            {prediction.details.model_used === 'ensemble' ? 'XGBoost + LSTM 앙상블' :
+                             prediction.details.model_used === 'xgboost' ? 'XGBoost 단독' :
+                             prediction.details.model_used === 'lstm' ? 'LSTM 단독' : '규칙 기반 (Fallback)'}
+                          </span>
+                        </div>
+                        {prediction.details.xgb_predicted != null && (
+                          <div className="sd-detail-model-row">
+                            <span className="sd-detail-model-name">XGBoost (60%)</span>
+                            <span className="sd-detail-model-price">{formatPrice(Math.round(prediction.details.xgb_predicted))}</span>
+                            <span className={`sd-detail-model-diff ${prediction.details.xgb_predicted >= prediction.current_price ? 'price-up' : 'price-down'}`}>
+                              {((prediction.details.xgb_predicted - prediction.current_price) / prediction.current_price * 100).toFixed(2)}%
+                            </span>
+                          </div>
+                        )}
+                        {prediction.details.lstm_predicted != null && (
+                          <div className="sd-detail-model-row">
+                            <span className="sd-detail-model-name">LSTM (40%)</span>
+                            <span className="sd-detail-model-price">{formatPrice(Math.round(prediction.details.lstm_predicted))}</span>
+                            <span className={`sd-detail-model-diff ${prediction.details.lstm_predicted >= prediction.current_price ? 'price-up' : 'price-down'}`}>
+                              {((prediction.details.lstm_predicted - prediction.current_price) / prediction.current_price * 100).toFixed(2)}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 기술적 지표 */}
+                    {prediction.details.technical_indicators && (() => {
+                      const ti = prediction.details.technical_indicators
+                      return (
+                        <div className="sd-detail-section">
+                          <h4 className="sd-detail-title">기술적 지표</h4>
+                          <div className="sd-detail-content">
+
+                            {/* 이동평균 */}
+                            <div className="sd-detail-group">
+                              <span className="sd-detail-group-label">이동평균 (이격도)</span>
+                              <div className="sd-detail-ind-list">
+                                {[['MA5', ti.ma5], ['MA10', ti.ma10], ['MA20', ti.ma20]].map(([label, val]) => {
+                                  const diff = ((prediction.current_price - val) / val * 100).toFixed(2)
+                                  const isAbove = prediction.current_price >= val
+                                  return (
+                                    <div key={label} className="sd-detail-ind-row">
+                                      <span className="sd-detail-ind-name">{label}</span>
+                                      <span className="sd-detail-ind-val">{formatNumber(Math.round(val))}</span>
+                                      <span className={`sd-detail-ind-signal ${isAbove ? 'signal-up' : 'signal-down'}`}>
+                                        {isAbove ? '▲' : '▼'} {Math.abs(diff)}%
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+
+                            {/* RSI */}
+                            <div className="sd-detail-group">
+                              <span className="sd-detail-group-label">RSI (14일)</span>
+                              <div className="sd-detail-rsi-wrap">
+                                <div className="sd-detail-rsi-track">
+                                  <div className="sd-detail-rsi-zone zone-sell" />
+                                  <div className="sd-detail-rsi-zone zone-neutral" />
+                                  <div className="sd-detail-rsi-zone zone-buy" />
+                                  <div className="sd-detail-rsi-needle" style={{ left: `${ti.rsi}%` }} />
+                                </div>
+                                <div className="sd-detail-rsi-labels">
+                                  <span>0</span><span>과매도30</span><span>50</span><span>과매수70</span><span>100</span>
+                                </div>
+                                <div className="sd-detail-rsi-result">
+                                  <span className="sd-detail-rsi-num">{ti.rsi.toFixed(1)}</span>
+                                  <span className={`sd-detail-ind-signal ${ti.rsi > 70 ? 'signal-down' : ti.rsi < 30 ? 'signal-up' : 'signal-neutral'}`}>
+                                    {ti.rsi > 70 ? '과매수 (매도 신호)' : ti.rsi < 30 ? '과매도 (매수 신호)' : '중립'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 볼린저밴드 */}
+                            <div className="sd-detail-group">
+                              <span className="sd-detail-group-label">볼린저밴드 (20일, ±2σ)</span>
+                              <div className="sd-detail-ind-list">
+                                {[['상단', ti.bb_upper, 'signal-down'], ['중간(기준)', ti.bb_middle, 'signal-neutral'], ['하단', ti.bb_lower, 'signal-up']].map(([label, val, cls]) => (
+                                  <div key={label} className="sd-detail-ind-row">
+                                    <span className="sd-detail-ind-name">{label}</span>
+                                    <span className="sd-detail-ind-val">{formatNumber(Math.round(val))}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              {ti.bb_position != null && (
+                                <div className="sd-detail-bb-pos-wrap">
+                                  <div className="sd-detail-bb-track">
+                                    <div className="sd-detail-bb-needle" style={{ left: `${(ti.bb_position * 100).toFixed(1)}%` }} />
+                                  </div>
+                                  <span className={`sd-detail-ind-signal ${ti.bb_position > 0.8 ? 'signal-down' : ti.bb_position < 0.2 ? 'signal-up' : 'signal-neutral'}`}>
+                                    밴드 내 위치 {(ti.bb_position * 100).toFixed(0)}%
+                                    {ti.bb_position > 0.8 ? ' · 상단 근접 (매도 신호)' : ti.bb_position < 0.2 ? ' · 하단 근접 (매수 신호)' : ' · 중간권'}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* MACD */}
+                            <div className="sd-detail-group">
+                              <span className="sd-detail-group-label">MACD (12-26-9)</span>
+                              <div className="sd-detail-ind-list">
+                                <div className="sd-detail-ind-row">
+                                  <span className="sd-detail-ind-name">MACD</span>
+                                  <span className="sd-detail-ind-val">{ti.macd.toFixed(1)}</span>
+                                </div>
+                                <div className="sd-detail-ind-row">
+                                  <span className="sd-detail-ind-name">시그널</span>
+                                  <span className="sd-detail-ind-val">{ti.macd_signal.toFixed(1)}</span>
+                                </div>
+                                <div className="sd-detail-ind-row">
+                                  <span className="sd-detail-ind-name">히스토그램</span>
+                                  <span className={`sd-detail-ind-val ${ti.macd_diff > 0 ? 'price-up' : 'price-down'}`}>
+                                    {ti.macd_diff > 0 ? '+' : ''}{ti.macd_diff.toFixed(1)}
+                                  </span>
+                                  <span className={`sd-detail-ind-signal ${ti.macd_diff > 0 ? 'signal-up' : 'signal-down'}`}>
+                                    {ti.macd_diff > 0 ? '상승 모멘텀' : '하락 모멘텀'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* 투자의견 근거 */}
+                    {prediction.details.recommendation_factors && (() => {
+                      const rf = prediction.details.recommendation_factors
+                      const ti = prediction.details.technical_indicators
+                      const factors = [
+                        { key: 'pred_score', label: '예측 변동률', weight: 30, extra: `${rf.pred_change_pct >= 0 ? '+' : ''}${rf.pred_change_pct?.toFixed(2)}%` },
+                        { key: 'trend_score', label: '추세 (MA)', weight: 25, extra: prediction.trend },
+                        { key: 'rsi_score', label: 'RSI', weight: 20, extra: ti?.rsi?.toFixed(1) },
+                        { key: 'macd_score', label: 'MACD', weight: 15, extra: ti?.macd_diff >= 0 ? '골든크로스↑' : '데드크로스↓' },
+                        { key: 'bb_score', label: '볼린저밴드', weight: 10, extra: ti?.bb_position != null ? `${(ti.bb_position * 100).toFixed(0)}%` : null },
+                      ]
+                      return (
+                        <div className="sd-detail-section">
+                          <h4 className="sd-detail-title">투자의견 근거</h4>
+                          <div className="sd-detail-content">
+                            {factors.map(({ key, label, weight, extra }) => {
+                              const score = rf[key] ?? 0
+                              return (
+                                <div key={key} className="sd-detail-factor">
+                                  <div className="sd-detail-factor-header">
+                                    <span className="sd-detail-factor-label">{label}</span>
+                                    <span className="sd-detail-factor-weight">가중 {weight}%</span>
+                                    {extra && <span className="sd-detail-factor-extra">{extra}</span>}
+                                    <span className={`sd-detail-factor-score ${score > 0 ? 'price-up' : score < 0 ? 'price-down' : ''}`}>
+                                      {score > 0 ? '+' : ''}{score.toFixed(2)}
+                                    </span>
+                                  </div>
+                                  <div className="sd-detail-factor-bar">
+                                    <div className="sd-detail-factor-center-line" />
+                                    <div
+                                      className={`sd-detail-factor-fill ${score >= 0 ? 'fill-up' : 'fill-down'}`}
+                                      style={{
+                                        left: score >= 0 ? '50%' : `${(score + 1) / 2 * 100}%`,
+                                        width: `${Math.abs(score) * 50}%`
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              )
+                            })}
+                            <div className="sd-detail-total">
+                              <span>종합 점수</span>
+                              <span className={rf.total_score > 0 ? 'price-up' : rf.total_score < 0 ? 'price-down' : ''}>
+                                {rf.total_score > 0 ? '+' : ''}{rf.total_score?.toFixed(3)}
+                              </span>
+                              <span className={`sd-badge recommend-${prediction.recommendation}`}>
+                                {prediction.recommendation}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* 뉴스 감성 */}
+                    {prediction.details.news_sentiment?.count > 0 && (
+                      <div className="sd-detail-section">
+                        <h4 className="sd-detail-title">뉴스 감성 분석</h4>
+                        <div className="sd-detail-content">
+                          <div className="sd-detail-news-grid">
+                            {[
+                              { label: '분석 뉴스', value: `${prediction.details.news_sentiment.count}건`, cls: '' },
+                              { label: '감성 점수', value: `${prediction.details.news_sentiment.score > 0 ? '+' : ''}${prediction.details.news_sentiment.score.toFixed(1)}`, cls: prediction.details.news_sentiment.score > 0 ? 'price-up' : prediction.details.news_sentiment.score < 0 ? 'price-down' : '' },
+                              { label: '긍정 비율', value: `${(prediction.details.news_sentiment.positive_ratio * 100).toFixed(0)}%`, cls: 'price-up' },
+                              { label: '부정 비율', value: `${(prediction.details.news_sentiment.negative_ratio * 100).toFixed(0)}%`, cls: 'price-down' },
+                            ].map(({ label, value, cls }) => (
+                              <div key={label} className="sd-detail-news-item">
+                                <span className="sd-detail-label">{label}</span>
+                                <span className={`sd-detail-value ${cls}`}>{value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                )}
+              </>
+            )}
+
             <p className="sd-pred-disclaimer">
               * 이 예측은 XGBoost + LSTM 앙상블 모델과 뉴스 감성 분석을 활용한 AI 분석이며, 투자 권유가 아닙니다.
             </p>

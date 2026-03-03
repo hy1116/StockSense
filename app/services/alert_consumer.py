@@ -25,29 +25,52 @@ settings = get_settings()
 
 
 async def run_alert_consumer():
-    """알림 컨슈머 루프 (앱 시작 시 백그라운드 태스크로 실행)"""
-    consumer = make_consumer(
-        topics=[settings.kafka_stock_price_topic],
-        group_id="price-alert-group",
-    )
-    await consumer.start()
-    logger.info(
-        f"Alert consumer started → topic: {settings.kafka_stock_price_topic}"
-    )
+    """알림 컨슈머 루프 (앱 시작 시 백그라운드 태스크로 실행)
 
-    try:
-        async for msg in consumer:
+    Kafka 연결 실패 시 지수 백오프로 재시도 (5s → 10s → 20s … 최대 120s).
+    연결 성공 후 메시지 루프 중 장애 발생 시 재연결 시도.
+    """
+    retry_delay = 5
+    max_retry_delay = 120
+
+    while True:
+        consumer = make_consumer(
+            topics=[settings.kafka_stock_price_topic],
+            group_id="price-alert-group",
+        )
+        try:
+            await consumer.start()
+            logger.info(
+                f"Alert consumer started → topic: {settings.kafka_stock_price_topic}"
+            )
+            retry_delay = 5  # 연결 성공 시 백오프 리셋
+
             try:
-                await _check_and_trigger(msg.value)
+                async for msg in consumer:
+                    try:
+                        await _check_and_trigger(msg.value)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        logger.error(f"Alert check error: {e}", exc_info=True)
+
             except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.error(f"Alert check error: {e}", exc_info=True)
-    except asyncio.CancelledError:
-        logger.info("Alert consumer cancelled")
-    finally:
-        await consumer.stop()
-        logger.info("Alert consumer stopped")
+                logger.info("Alert consumer cancelled")
+                return  # 앱 종료 시 완전히 종료
+
+            finally:
+                await consumer.stop()
+                logger.info("Alert consumer stopped")
+
+        except asyncio.CancelledError:
+            return  # 앱 종료 시 완전히 종료
+
+        except Exception as e:
+            logger.warning(
+                f"Alert consumer failed to connect (retry in {retry_delay}s): {e}"
+            )
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, max_retry_delay)
 
 
 async def _check_and_trigger(price_data: dict):

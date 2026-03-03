@@ -5,7 +5,7 @@ from functools import lru_cache
 class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    debug: bool = True
+    debug: bool = False
 
     database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/stocksense"
 

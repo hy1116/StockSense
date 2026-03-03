@@ -292,9 +292,12 @@ class PredictionService:
 
             # 예측 가격 계산
             has_any_model = self.use_ml and (self.xgb_model is not None or self.lstm_model is not None)
+            xgb_pred = None
+            lstm_pred = None
+            model_used = "rule_based"
 
             if has_any_model:
-                predicted_price = self._predict_ensemble(
+                predicted_price, xgb_pred, lstm_pred, model_used = self._predict_ensemble(
                     current_price, open_prices[0], high_prices[0], low_prices[0], volumes[0],
                     ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
                     close_prices, open_prices, high_prices, low_prices, volumes,
@@ -316,12 +319,52 @@ class PredictionService:
             if has_any_model:
                 confidence = min(0.80, confidence + 0.05)
 
-            recommendation = self._get_recommendation(
+            recommendation, factor_scores = self._get_recommendation(
                 current_price, predicted_price, trend, rsi, macd, signal,
                 bb_upper, bb_lower, volumes
             )
 
             prediction_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+            # 뉴스 감성 (details용 재사용 or 재조회)
+            news_features = self._get_news_sentiment_features(stock_code)
+
+            # 볼린저밴드 현재 위치 (0~1)
+            bb_position = None
+            if bb_upper != bb_lower and bb_upper > 0:
+                bb_position = round((current_price - bb_lower) / (bb_upper - bb_lower), 3)
+
+            # 전일 대비 변동률
+            price_change_1d = 0.0
+            if len(close_prices) >= 2 and close_prices[1] > 0:
+                price_change_1d = round(float((close_prices[0] - close_prices[1]) / close_prices[1] * 100), 2)
+
+            details = {
+                "model_used": model_used,
+                "xgb_predicted": round(xgb_pred, 2) if xgb_pred is not None else None,
+                "lstm_predicted": round(lstm_pred, 2) if lstm_pred is not None else None,
+                "technical_indicators": {
+                    "ma5": round(float(ma5), 2),
+                    "ma10": round(float(ma10), 2),
+                    "ma20": round(float(ma20), 2),
+                    "rsi": round(float(rsi), 2),
+                    "bb_upper": round(float(bb_upper), 2),
+                    "bb_middle": round(float(bb_middle), 2),
+                    "bb_lower": round(float(bb_lower), 2),
+                    "bb_position": bb_position,
+                    "macd": round(float(macd), 2),
+                    "macd_signal": round(float(signal), 2),
+                    "macd_diff": round(float(macd - signal), 2),
+                    "price_change_1d": price_change_1d,
+                },
+                "news_sentiment": {
+                    "score": round(float(news_features.get("news_sentiment_avg", 0)), 2),
+                    "count": int(news_features.get("news_count", 0)),
+                    "positive_ratio": round(float(news_features.get("news_positive_ratio", 0)), 3),
+                    "negative_ratio": round(float(news_features.get("news_negative_ratio", 0)), 3),
+                },
+                "recommendation_factors": factor_scores,
+            }
 
             return {
                 "stock_code": stock_code,
@@ -331,7 +374,8 @@ class PredictionService:
                 "prediction_date": prediction_date,
                 "confidence": round(confidence, 2),
                 "trend": trend,
-                "recommendation": recommendation
+                "recommendation": recommendation,
+                "details": details,
             }
 
         except Exception as e:
@@ -341,8 +385,8 @@ class PredictionService:
     def _predict_ensemble(self, current_price, open_price, high_price, low_price, volume,
                           ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
                           close_prices, open_prices, high_prices, low_prices, volumes,
-                          stock_code=None, chart_data=None) -> float:
-        """XGBoost + LSTM 앙상블 예측"""
+                          stock_code=None, chart_data=None):
+        """XGBoost + LSTM 앙상블 예측 → (predicted, xgb_pred, lstm_pred, model_used)"""
         xgb_pred = None
         lstm_pred = None
 
@@ -364,15 +408,19 @@ class PredictionService:
         # 앙상블 결합
         if xgb_pred is not None and lstm_pred is not None:
             predicted = XGB_WEIGHT * xgb_pred + LSTM_WEIGHT * lstm_pred
+            model_used = "ensemble"
             logger.info(f"[Ensemble] {XGB_WEIGHT}*XGB + {LSTM_WEIGHT}*LSTM = {predicted:.2f}")
         elif xgb_pred is not None:
             predicted = xgb_pred
+            model_used = "xgboost"
         elif lstm_pred is not None:
             predicted = lstm_pred
+            model_used = "lstm"
         else:
             predicted = float(current_price)
+            model_used = "rule_based"
 
-        return predicted
+        return predicted, xgb_pred, lstm_pred, model_used
 
     def _predict_with_xgb(self, current_price, open_price, high_price, low_price, volume,
                           ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
@@ -719,8 +767,8 @@ class PredictionService:
     def _get_recommendation(self, current: float, predicted: float, trend: str,
                            rsi: float, macd: float, signal: float,
                            bb_upper: float = 0, bb_lower: float = 0,
-                           volumes: np.ndarray = None) -> str:
-        """멀티팩터 가중 스코어링 기반 투자의견
+                           volumes: np.ndarray = None):
+        """멀티팩터 가중 스코어링 기반 투자의견 → (recommendation, factor_scores)
 
         각 팩터를 -1.0 ~ +1.0 으로 정규화한 뒤 가중 합산.
         가중치 배분 (합계 1.0):
@@ -738,7 +786,6 @@ class PredictionService:
 
         # --- 1) 예측 변동률 시그널 ---
         change_pct = ((predicted - current) / current) * 100 if current else 0
-        # ±5% 에서 포화, 연속 매핑
         pred_score = max(-1.0, min(1.0, change_pct / 5.0))
 
         # --- 2) 추세 시그널 (MA 정렬) ---
@@ -752,20 +799,18 @@ class PredictionService:
         trend_score = trend_map.get(trend, 0.0)
 
         # --- 3) RSI 시그널 (연속 매핑) ---
-        # RSI 50 = 중립, 30/70 = ±0.5, 20/80 = ±1.0
         if rsi <= 20:
             rsi_score = 1.0
         elif rsi <= 50:
-            rsi_score = (50 - rsi) / 30.0        # 50→0, 20→1.0
+            rsi_score = (50 - rsi) / 30.0
         elif rsi <= 80:
-            rsi_score = (50 - rsi) / 30.0        # 50→0, 80→-1.0
+            rsi_score = (50 - rsi) / 30.0
         else:
             rsi_score = -1.0
 
         # --- 4) MACD 시그널 ---
         macd_diff = macd - signal
         if current > 0:
-            # 가격 대비 정규화, ±0.5% 에서 포화
             norm_macd = (macd_diff / current) * 100
             macd_score = max(-1.0, min(1.0, norm_macd / 0.5))
         else:
@@ -774,9 +819,9 @@ class PredictionService:
         # --- 5) 볼린저밴드 시그널 (평균회귀) ---
         if bb_upper and bb_lower and bb_upper != bb_lower:
             bb_pos = (current - bb_lower) / (bb_upper - bb_lower)
-            # 0.5 = 중립, 0 = 하단(매수), 1 = 상단(매도)
             bb_score = max(-1.0, min(1.0, (0.5 - bb_pos) * 2))
         else:
+            bb_pos = 0.5
             bb_score = 0.0
 
         # --- 가중 합산 ---
@@ -786,18 +831,30 @@ class PredictionService:
                  + W_MACD * macd_score
                  + W_BB * bb_score)
 
-        # --- 판정 (total 범위: -1.0 ~ +1.0) ---
-        # "적극"은 대부분의 지표가 같은 방향을 가리킬 때만 발생
+        # --- 판정 ---
         if total >= 0.65:
-            return "적극 매수"
+            recommendation = "적극 매수"
         elif total >= 0.2:
-            return "매수"
+            recommendation = "매수"
         elif total <= -0.65:
-            return "적극 매도"
+            recommendation = "적극 매도"
         elif total <= -0.2:
-            return "매도"
+            recommendation = "매도"
         else:
-            return "보유"
+            recommendation = "보유"
+
+        factor_scores = {
+            "pred_change_pct": round(change_pct, 2),
+            "pred_score": round(pred_score, 3),
+            "trend_score": round(trend_score, 3),
+            "rsi_score": round(rsi_score, 3),
+            "macd_score": round(macd_score, 3),
+            "bb_score": round(bb_score, 3),
+            "total_score": round(total, 3),
+            "weights": {"pred": W_PRED, "trend": W_TREND, "rsi": W_RSI, "macd": W_MACD, "bb": W_BB},
+        }
+
+        return recommendation, factor_scores
 
     def _get_news_sentiment_features(self, stock_code: str) -> dict:
         """DB에서 해당 종목의 최근 뉴스 감성 피처 조회"""
@@ -853,7 +910,15 @@ class PredictionService:
             "prediction_date": (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"),
             "confidence": 0.3,
             "trend": "보합",
-            "recommendation": "보유"
+            "recommendation": "보유",
+            "details": {
+                "model_used": "rule_based",
+                "xgb_predicted": None,
+                "lstm_predicted": None,
+                "technical_indicators": None,
+                "news_sentiment": None,
+                "recommendation_factors": None,
+            }
         }
 
     def get_model_info(self) -> Dict:

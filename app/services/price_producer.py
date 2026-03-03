@@ -29,21 +29,34 @@ settings = get_settings()
 
 
 async def run_price_producer():
-    """주가 폴링 루프 (앱 시작 시 백그라운드 태스크로 실행)"""
+    """주가 폴링 루프 (앱 시작 시 백그라운드 태스크로 실행)
+
+    Kafka 연결 실패 시 지수 백오프로 재시도 (5s → 10s → 20s … 최대 120s).
+    정상 동작 중에는 POLL_INTERVAL마다 실행.
+    """
     logger.info(
         f"Price producer started (Naver Finance). "
         f"Polling every {settings.kafka_poll_interval_seconds}s"
     )
+    retry_delay = 5
+    max_retry_delay = 120
+
     while True:
         try:
             await _fetch_and_publish()
+            retry_delay = 5  # 성공하면 백오프 리셋
+            await asyncio.sleep(settings.kafka_poll_interval_seconds)
+
         except asyncio.CancelledError:
             logger.info("Price producer cancelled")
             break
-        except Exception as e:
-            logger.error(f"Price producer error: {e}", exc_info=True)
 
-        await asyncio.sleep(settings.kafka_poll_interval_seconds)
+        except Exception as e:
+            logger.warning(
+                f"Price producer error (retry in {retry_delay}s): {e}"
+            )
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, max_retry_delay)
 
 
 async def _fetch_and_publish():

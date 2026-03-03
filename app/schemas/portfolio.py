@@ -119,6 +119,7 @@ class PredictionResult(BaseModel):
     confidence: float = Field(..., description="예측 신뢰도 (0-1)")
     trend: str = Field(..., description="추세 (상승/하락/보합)")
     recommendation: str = Field(..., description="투자의견 (매수/매도/보유)")
+    details: Optional[dict] = Field(None, description="예측 상세 정보 (기술적 지표, 모델별 예측값 등)")
 
 
 class StockDetailInfo(BaseModel):
