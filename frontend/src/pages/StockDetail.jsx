@@ -845,7 +845,7 @@ function StockDetail() {
             <div className="sd-pred-hero">
               <div className="sd-pred-price-block">
                 <span className="sd-pred-label">예측가</span>
-                <span className="sd-pred-price">{formatPrice(Math.round(prediction.predicted_price))}</span>
+                <span className={`sd-pred-price${predictionChange !== null ? (predictionChange >= 0 ? ' price-up' : ' price-down') : ''}`}>{formatPrice(Math.round(prediction.predicted_price))}</span>
                 {predictionChange !== null && (
                   <span className={`sd-pred-diff ${predictionChange >= 0 ? 'price-up' : 'price-down'}`}>
                     {predictionChange >= 0 ? '+' : ''}{predictionChange.toFixed(2)}%
