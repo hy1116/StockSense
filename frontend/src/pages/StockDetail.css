@@ -1701,6 +1701,50 @@
   .sd-confidence-bar { background: #e5e7eb; }
   .sd-confidence-text { color: #111827; }
 
+  .sd-pred-details-btn {
+    background: rgba(79, 70, 229, 0.06);
+    border-color: rgba(79, 70, 229, 0.18);
+    color: #4f46e5;
+  }
+  .sd-pred-details-btn:hover,
+  .sd-pred-details-btn.active {
+    background: rgba(79, 70, 229, 0.1);
+    border-color: rgba(79, 70, 229, 0.3);
+  }
+
+  .sd-detail-section {
+    background: #f9fafb;
+    border-color: #e5e7eb;
+  }
+  .sd-detail-title {
+    background: #f3f4f6;
+    border-bottom-color: #e5e7eb;
+    color: rgba(17, 24, 39, 0.5);
+  }
+  .sd-detail-model-info { border-bottom-color: #e5e7eb; }
+  .sd-detail-model-name { color: rgba(17, 24, 39, 0.55); }
+  .sd-detail-model-price { color: #111827; }
+  .sd-detail-label { color: rgba(17, 24, 39, 0.45); }
+  .sd-detail-value { color: #111827; }
+  .sd-detail-group { border-bottom-color: #e5e7eb; }
+  .sd-detail-group-label { color: rgba(17, 24, 39, 0.35); }
+  .sd-detail-ind-name { color: rgba(17, 24, 39, 0.5); }
+  .sd-detail-ind-val { color: #111827; }
+  .sd-detail-rsi-labels { color: rgba(17, 24, 39, 0.35); }
+  .sd-detail-rsi-num { color: #111827; }
+  .sd-detail-factor { border-bottom-color: #e5e7eb; }
+  .sd-detail-factor-label { color: rgba(17, 24, 39, 0.7); }
+  .sd-detail-factor-weight { color: rgba(17, 24, 39, 0.35); }
+  .sd-detail-factor-extra {
+    color: rgba(17, 24, 39, 0.5);
+    background: rgba(0, 0, 0, 0.05);
+  }
+  .sd-detail-factor-bar { background: rgba(0, 0, 0, 0.07); }
+  .sd-detail-factor-center-line { background: rgba(0, 0, 0, 0.15); }
+  .sd-detail-total { border-top-color: rgba(17, 24, 39, 0.08); }
+  .sd-detail-total span:first-child { color: rgba(17, 24, 39, 0.55); }
+  .sd-detail-news-item { background: rgba(0, 0, 0, 0.03); }
+
   .sd-pred-disclaimer {
     background: #f9fafb;
     color: rgba(17, 24, 39, 0.4);
