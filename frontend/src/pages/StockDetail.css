@@ -651,7 +651,7 @@
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 10px;
-  overflow: hidden;
+  overflow: visible;
 }
 .sd-detail-title {
   margin: 0;
@@ -725,12 +725,68 @@
 }
 .sd-detail-group:last-child { border-bottom: none; }
 .sd-detail-group-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
   font-size: 0.76rem;
   color: rgba(255, 255, 255, 0.35);
   text-transform: uppercase;
   letter-spacing: 0.03em;
   margin-bottom: 0.1rem;
 }
+
+/* 기술적 지표 툴팁 */
+.sd-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: default;
+  line-height: 1;
+}
+.sd-tip-box {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 210px;
+  background: #1a2233;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.55;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.sd-tip-box::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(255, 255, 255, 0.12);
+}
+.sd-tip:hover .sd-tip-box { display: block; }
 .sd-detail-ind-list {
   display: flex;
   flex-direction: column;
@@ -1728,6 +1784,9 @@
   .sd-detail-value { color: #111827; }
   .sd-detail-group { border-bottom-color: #e5e7eb; }
   .sd-detail-group-label { color: rgba(17, 24, 39, 0.35); }
+  .sd-tip { background: rgba(0, 0, 0, 0.08); color: rgba(17, 24, 39, 0.4); }
+  .sd-tip-box { background: #fff; border-color: #e5e7eb; color: #374151; box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+  .sd-tip-box::after { border-top-color: #e5e7eb; }
   .sd-detail-ind-name { color: rgba(17, 24, 39, 0.5); }
   .sd-detail-ind-val { color: #111827; }
   .sd-detail-rsi-labels { color: rgba(17, 24, 39, 0.35); }

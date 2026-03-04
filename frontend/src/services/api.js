@@ -204,6 +204,13 @@ export const getStockIntraday = async (symbol, interval = 1) => {
   return response.data
 }
 
+export const getStockChart = async (symbol, period = '1D') => {
+  const response = await api.get(`/api/portfolio/stock/${symbol}/chart`, {
+    params: { period }
+  })
+  return response.data
+}
+
 // ===== Comments API =====
 
 export const getComments = async (stockCode, page = 1, pageSize = 20) => {

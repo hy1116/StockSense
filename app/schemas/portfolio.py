@@ -94,6 +94,16 @@ class MinuteChartData(BaseModel):
     volume: int = Field(..., description="거래량")
 
 
+class ChartCandle(BaseModel):
+    """네이버 금융 차트 캔들 (기간 통합)"""
+    dt: str    # YYYYMMDDHHMM (intraday) | YYYYMMDD (daily)
+    open: int
+    high: int
+    low: int
+    close: int
+    volume: int
+
+
 class StockBasicInfo(BaseModel):
     """종목 기본 정보"""
     stock_code: str = Field(..., description="종목코드")

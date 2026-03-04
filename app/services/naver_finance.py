@@ -109,6 +109,68 @@ class NaverFinanceClient:
             if isinstance(result, dict) and result is not None
         }
 
+    async def get_chart(self, stock_code: str, period: str) -> list[dict]:
+        """네이버 fchart API (1W/1M/3M/1Y 전용 — 일봉/주봉)
+
+        1D는 KIS API intraday를 사용하므로 여기선 처리하지 않음.
+
+        Args:
+            stock_code: 6자리 종목코드
+            period: '1W' | '1M' | '3M' | '1Y'
+
+        Returns:
+            [{"dt": "YYYYMMDD", "open": int, "high": int, "low": int, "close": int, "volume": int}, ...]
+        """
+        import ast as _ast
+        from datetime import datetime, timedelta
+        now = datetime.now()
+
+        # fchart는 일봉(day)/주봉(week)만 OHLCV 완전 지원
+        configs = {
+            '1W': ('day',  (now - timedelta(days=14)).strftime("%Y%m%d"),  now.strftime("%Y%m%d")),
+            '1M': ('day',  (now - timedelta(days=40)).strftime("%Y%m%d"),  now.strftime("%Y%m%d")),
+            '3M': ('day',  (now - timedelta(days=100)).strftime("%Y%m%d"), now.strftime("%Y%m%d")),
+            '1Y': ('week', (now - timedelta(days=375)).strftime("%Y%m%d"), now.strftime("%Y%m%d")),
+        }
+        if period not in configs:
+            return []
+
+        timeframe, start_dt, end_dt = configs[period]
+        url = "https://fchart.stock.naver.com/siseJson.nhn"
+        params = {
+            "symbol": stock_code,
+            "requestType": "1",
+            "startTime": start_dt,
+            "endTime": end_dt,
+            "timeframe": timeframe,
+        }
+        # fchart는 finance.naver.com Referer 필요
+        headers = {"Referer": "https://finance.naver.com/"}
+
+        try:
+            resp = await self._client.get(url, params=params, headers=headers)
+            resp.raise_for_status()
+            # 응답은 single-quote 혼재 Python 리터럴 → ast로 파싱
+            raw = resp.text.replace('null', 'None')
+            rows = _ast.literal_eval(raw.strip())
+
+            result = []
+            for row in rows[1:]:  # 첫 행은 한글 헤더 스킵
+                if not row or row[1] is None:
+                    continue
+                result.append({
+                    "dt":     str(row[0]),  # YYYYMMDD
+                    "open":   int(row[1]),
+                    "high":   int(row[2]),
+                    "low":    int(row[3]),
+                    "close":  int(row[4]),
+                    "volume": int(row[5]),
+                })
+            return result
+        except Exception as e:
+            logger.error(f"[fchart] {stock_code}/{period}: {e}")
+            return []
+
     async def close(self):
         await self._client.aclose()
 

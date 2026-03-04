@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { getStockDetail, getStockIntraday, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock, getPredictionAccuracy, checkWatchlist, addToWatchlist, removeFromWatchlist } from '../services/api'
+import { getStockDetail, getStockChart, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock, getPredictionAccuracy, checkWatchlist, addToWatchlist, removeFromWatchlist } from '../services/api'
 import { createChart } from 'lightweight-charts'
 import './StockDetail.css'
 
@@ -14,7 +14,7 @@ function StockDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [period, setPeriod] = useState('1D')
-  const [intradayData, setIntradayData] = useState(null)
+  const [chartCandles, setChartCandles] = useState([])
 
   // 댓글 관련 state
   const [comments, setComments] = useState([])
@@ -355,17 +355,18 @@ function StockDetail() {
     return `${val.toFixed(2)}억`
   }
 
+  // 기술적 지표 툴팁 컴포넌트
+  const Tip = ({ text }) => (
+    <span className="sd-tip">?<span className="sd-tip-box">{text}</span></span>
+  )
+
   // lightweight-charts 초기화
   const initChart = useCallback(() => {
     if (!chartContainerRef.current || !stockData) return
 
+    if (!chartCandles || chartCandles.length === 0) return
+
     const isIntraday = period === '1D'
-
-    // 분봉 모드인데 데이터 없으면 스킵
-    if (isIntraday && (!intradayData || intradayData.length === 0)) return
-
-    const chartData = stockData.chart_data
-    if (!isIntraday && (!chartData || chartData.length === 0)) return
 
     // 기존 차트 제거
     if (chartInstanceRef.current) {
@@ -376,10 +377,8 @@ function StockDetail() {
     }
 
     // 기간별 바 간격 계산 (차트 너비에 맞게 캔들을 고르게 배치)
-    // 1D: 10분 단위 ~39개, 1W: 5일, 1M: 22일, 3M: 65일, 1Y: 주봉 ~52개
     const containerWidth = chartContainerRef.current.clientWidth
-    // 1D: 10분 단위 ~39개, 1W: 5일, 1M: 22일, 3M: 65일, 1Y: 52주
-    const visibleBarCount = { '1D': 39, '1W': 5, '1M': 22, '3M': 65, '1Y': 52 }[period] || 65
+    const visibleBarCount = { '1D': 40, '1W': 10, '1M': 22, '3M': 65, '1Y': 52 }[period] || 65
     const calcBarSpacing = Math.max(4, Math.min(60, (containerWidth - 80) / (visibleBarCount + 2)))
 
     const chart = createChart(chartContainerRef.current, {
@@ -445,113 +444,24 @@ function StockDetail() {
     let candleResult = []
     let volumeResult = []
 
-    if (isIntraday) {
-      // 1D: 10분 단위로 그룹핑하여 OHLCV 집계
-      const today = new Date()
-      const yyyy = today.getFullYear()
-      const mm = today.getMonth()
-      const dd = today.getDate()
-
-      const grouped = {}
-      intradayData.forEach(d => {
-        if (!d.time) return
-        const [hh, mi] = d.time.split(':').map(Number)
-        if (d.open <= 0 || d.high <= 0 || d.low <= 0 || d.close <= 0) return
-        const bucketMin = Math.floor(mi / 10) * 10
-        const key = `${String(hh).padStart(2, '0')}:${String(bucketMin).padStart(2, '0')}`
-        if (!grouped[key]) {
-          grouped[key] = { open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume || 0 }
-        } else {
-          grouped[key].high = Math.max(grouped[key].high, d.high)
-          grouped[key].low = Math.min(grouped[key].low, d.low)
-          grouped[key].close = d.close
-          grouped[key].volume += (d.volume || 0)
-        }
-      })
-
-      Object.keys(grouped).sort().forEach(key => {
-        const [hh, mi] = key.split(':').map(Number)
-        const ts = Math.floor(Date.UTC(yyyy, mm, dd, hh, mi, 0) / 1000)
-        const g = grouped[key]
-        candleResult.push({ time: ts, open: g.open, high: g.high, low: g.low, close: g.close })
-        volumeResult.push({
-          time: ts,
-          value: g.volume,
-          color: g.close >= g.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
-        })
-      })
-    } else if (period === '1Y') {
-      // 1년: 1주일 단위로 집계 (주봉)
-      const sortedData = [...chartData].reverse()
-      const seenTimes = new Set()
-      const dailyCandles = []
-
-      sortedData.forEach(d => {
-        if (!d.date || d.date.length < 8) return
-        const time = `${d.date.slice(0, 4)}-${d.date.slice(4, 6)}-${d.date.slice(6, 8)}`
-        if (seenTimes.has(time)) return
-        seenTimes.add(time)
-        if (d.open > 0 && d.high > 0 && d.low > 0 && d.close > 0) {
-          dailyCandles.push({ time, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume || 0 })
-        }
-      })
-
-      // 주 단위로 그룹핑 (월요일 기준)
-      const weeklyMap = {}
-      dailyCandles.forEach(d => {
-        const date = new Date(d.time + 'T00:00:00')
-        const day = date.getDay()
-        const diff = day === 0 ? -6 : 1 - day
-        const monday = new Date(date)
-        monday.setDate(date.getDate() + diff)
-        const weekKey = monday.toISOString().slice(0, 10)
-        if (!weeklyMap[weekKey]) {
-          weeklyMap[weekKey] = { time: d.time, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume }
-        } else {
-          weeklyMap[weekKey].high = Math.max(weeklyMap[weekKey].high, d.high)
-          weeklyMap[weekKey].low = Math.min(weeklyMap[weekKey].low, d.low)
-          weeklyMap[weekKey].close = d.close
-          weeklyMap[weekKey].volume += d.volume
-          weeklyMap[weekKey].time = d.time // 주의 마지막 거래일 날짜 사용
-        }
-      })
-
-      Object.keys(weeklyMap).sort().forEach(weekKey => {
-        const w = weeklyMap[weekKey]
-        candleResult.push({ time: w.time, open: w.open, high: w.high, low: w.low, close: w.close })
-        volumeResult.push({
-          time: w.time,
-          value: w.volume,
-          color: w.close >= w.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
-        })
-      })
-    } else {
-      // 1W / 1M / 3M: 일봉 데이터를 기간별로 필터링
-      const maxDays = { '1W': 7, '1M': 30, '3M': 100 }[period] || 100
-      const cutoffDate = new Date()
-      cutoffDate.setDate(cutoffDate.getDate() - maxDays)
-      const cutoffStr = cutoffDate.toISOString().slice(0, 10).replace(/-/g, '')
-
-      const sortedData = [...chartData].reverse()
-      const seenTimes = new Set()
-
-      sortedData.forEach(d => {
-        if (!d.date || d.date.length < 8) return
-        if (d.date < cutoffStr) return  // 기간 밖 데이터 제외
-        const time = `${d.date.slice(0, 4)}-${d.date.slice(4, 6)}-${d.date.slice(6, 8)}`
-        if (seenTimes.has(time)) return
-        seenTimes.add(time)
-
-        if (d.open > 0 && d.high > 0 && d.low > 0 && d.close > 0) {
-          candleResult.push({ time, open: d.open, high: d.high, low: d.low, close: d.close })
-          volumeResult.push({
-            time,
-            value: d.volume || 0,
-            color: d.close >= d.open ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)',
-          })
-        }
-      })
-    }
+    chartCandles.forEach(d => {
+      let time
+      if (isIntraday) {
+        // dt = YYYYMMDDHHMM (12자리)
+        const year  = parseInt(d.dt.slice(0, 4))
+        const month = parseInt(d.dt.slice(4, 6)) - 1
+        const day   = parseInt(d.dt.slice(6, 8))
+        const hh    = parseInt(d.dt.slice(8, 10))
+        const mi    = parseInt(d.dt.slice(10, 12))
+        time = Math.floor(Date.UTC(year, month, day, hh, mi, 0) / 1000)
+      } else {
+        // dt = YYYYMMDD (8자리)
+        time = `${d.dt.slice(0, 4)}-${d.dt.slice(4, 6)}-${d.dt.slice(6, 8)}`
+      }
+      const up = d.close >= d.open
+      candleResult.push({ time, open: d.open, high: d.high, low: d.low, close: d.close })
+      volumeResult.push({ time, value: d.volume, color: up ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)' })
+    })
 
     candleSeries.setData(candleResult)
     volumeSeries.setData(volumeResult)
@@ -581,7 +491,7 @@ function StockDetail() {
         volumeSeriesRef.current = null
       }
     }
-  }, [stockData, period, intradayData])
+  }, [stockData, period, chartCandles])
 
   // 차트 초기화
   useEffect(() => {
@@ -600,42 +510,31 @@ function StockDetail() {
     return currentTime >= 900 && currentTime <= 1530
   }
 
-  // 분봉 데이터 조회
-  const fetchIntraday = async (intervalOverride) => {
-    const intervalMap = { '1D': 1, '1W': 30, '1M': 60 }
-    const interval = intervalOverride || intervalMap[period] || 1
+  // 차트 데이터 조회 (네이버 금융)
+  const fetchChartData = useCallback(async (periodOverride) => {
+    const p = periodOverride || period
     try {
-      const data = await getStockIntraday(symbol, interval)
-      setIntradayData(data)
+      const data = await getStockChart(symbol, p)
+      setChartCandles(data)
     } catch (err) {
-      console.error('분봉 데이터 조회 실패:', err)
+      console.error('차트 데이터 조회 실패:', err)
+      setChartCandles([])
     }
-  }
+  }, [symbol, period])
 
-  // 주기적 데이터 갱신 (30초 간격)
+  // 주기적 데이터 갱신 (30초 간격, 1D만)
   useEffect(() => {
     fetchStockDetail(true)
+    fetchChartData()
 
-    // 1D, 1W, 1M은 분봉 데이터 필요 - 초기 로딩 시 즉시 가져오기
-    if (['1D', '1W', '1M'].includes(period)) {
-      fetchIntraday()
-    }
-
-    if (isMarketOpen()) {
+    if (isMarketOpen() && period === '1D') {
       autoRefreshIntervalRef.current = setInterval(() => {
         fetchStockDetail(false)
-        // 분봉 기반 차트 선택 중이면 분봉 데이터도 함께 갱신
-        if (['1D', '1W', '1M'].includes(period)) {
-          fetchIntraday()
-        }
+        fetchChartData()
       }, 30000)
     }
 
-    return () => {
-      if (autoRefreshIntervalRef.current) {
-        clearInterval(autoRefreshIntervalRef.current)
-      }
-    }
+    return () => clearInterval(autoRefreshIntervalRef.current)
   }, [symbol, period])
 
   // 뉴스, 댓글, 적중률, 관심종목 로드
@@ -757,7 +656,6 @@ function StockDetail() {
           <div className="sd-period-selector">
             {[
               { key: '1D', label: '1일' },
-              { key: '1W', label: '1주' },
               { key: '1M', label: '1개월' },
               { key: '3M', label: '3개월' },
               { key: '1Y', label: '1년' },
@@ -765,18 +663,9 @@ function StockDetail() {
               <button
                 key={p.key}
                 className={period === p.key ? 'active' : ''}
-                onClick={async () => {
+                onClick={() => {
                   setPeriod(p.key)
-                  if (['1D', '1W', '1M'].includes(p.key) && symbol) {
-                    const intervalMap = { '1D': 1, '1W': 30, '1M': 60 }
-                    try {
-                      const data = await getStockIntraday(symbol, intervalMap[p.key])
-                      setIntradayData(data)
-                    } catch (err) {
-                      console.error('분봉 데이터 조회 실패:', err)
-                      setIntradayData([])
-                    }
-                  }
+                  fetchChartData(p.key)
                 }}
               >
                 {p.label}
@@ -785,7 +674,7 @@ function StockDetail() {
           </div>
         </div>
         <div className="sd-chart-container">
-          {chart_data && chart_data.length > 0 ? (
+          {chartCandles && chartCandles.length > 0 ? (
             <div ref={chartContainerRef} style={{ position: 'relative', width: '100%', height: '400px' }} />
           ) : (
             <p className="sd-empty">차트 데이터가 없습니다</p>
@@ -1001,7 +890,7 @@ function StockDetail() {
 
                             {/* 이동평균 */}
                             <div className="sd-detail-group">
-                              <span className="sd-detail-group-label">이동평균 (이격도)</span>
+                              <span className="sd-detail-group-label">이동평균 (이격도) <Tip text="5일·10일·20일 이동평균선과 현재가의 이격률입니다. 현재가가 이동평균 위에 있으면 상승 추세, 아래이면 하락 추세를 나타냅니다." /></span>
                               <div className="sd-detail-ind-list">
                                 {[['MA5', ti.ma5], ['MA10', ti.ma10], ['MA20', ti.ma20]].map(([label, val]) => {
                                   const diff = ((prediction.current_price - val) / val * 100).toFixed(2)
@@ -1021,7 +910,7 @@ function StockDetail() {
 
                             {/* RSI */}
                             <div className="sd-detail-group">
-                              <span className="sd-detail-group-label">RSI (14일)</span>
+                              <span className="sd-detail-group-label">RSI (14일) <Tip text="상대강도지수(RSI)는 0~100 사이 값입니다. 70 이상이면 과매수(매도 신호), 30 이하면 과매도(매수 신호)로 해석하며, 추세 반전 가능성을 나타냅니다." /></span>
                               <div className="sd-detail-rsi-wrap">
                                 <div className="sd-detail-rsi-track">
                                   <div className="sd-detail-rsi-zone zone-sell" />
@@ -1043,7 +932,7 @@ function StockDetail() {
 
                             {/* 볼린저밴드 */}
                             <div className="sd-detail-group">
-                              <span className="sd-detail-group-label">볼린저밴드 (20일, ±2σ)</span>
+                              <span className="sd-detail-group-label">볼린저밴드 (20일, ±2σ) <Tip text="20일 이동평균선 기준 ±2 표준편차 밴드입니다. 현재가가 상단 근접 시 과열 구간(매도 신호), 하단 근접 시 저평가 구간(매수 신호)으로 해석합니다." /></span>
                               <div className="sd-detail-ind-list">
                                 {[['상단', ti.bb_upper, 'signal-down'], ['중간(기준)', ti.bb_middle, 'signal-neutral'], ['하단', ti.bb_lower, 'signal-up']].map(([label, val, cls]) => (
                                   <div key={label} className="sd-detail-ind-row">
@@ -1067,7 +956,7 @@ function StockDetail() {
 
                             {/* MACD */}
                             <div className="sd-detail-group">
-                              <span className="sd-detail-group-label">MACD (12-26-9)</span>
+                              <span className="sd-detail-group-label">MACD (12-26-9) <Tip text="단기(12일)와 장기(26일) 이동평균의 차이입니다. 히스토그램이 양수(+)이면 상승 모멘텀, 음수(-)이면 하락 모멘텀을 나타냅니다. 시그널선(9일 평균) 돌파 시 추세 전환 신호입니다." /></span>
                               <div className="sd-detail-ind-list">
                                 <div className="sd-detail-ind-row">
                                   <span className="sd-detail-ind-name">MACD</span>
@@ -1099,22 +988,22 @@ function StockDetail() {
                       const rf = prediction.details.recommendation_factors
                       const ti = prediction.details.technical_indicators
                       const factors = [
-                        { key: 'pred_score', label: '예측 변동률', weight: 30, extra: `${rf.pred_change_pct >= 0 ? '+' : ''}${rf.pred_change_pct?.toFixed(2)}%` },
-                        { key: 'trend_score', label: '추세 (MA)', weight: 25, extra: prediction.trend },
-                        { key: 'rsi_score', label: 'RSI', weight: 20, extra: ti?.rsi?.toFixed(1) },
-                        { key: 'macd_score', label: 'MACD', weight: 15, extra: ti?.macd_diff >= 0 ? '골든크로스↑' : '데드크로스↓' },
-                        { key: 'bb_score', label: '볼린저밴드', weight: 10, extra: ti?.bb_position != null ? `${(ti.bb_position * 100).toFixed(0)}%` : null },
+                        { key: 'pred_score', label: '예측 변동률', weight: 30, extra: `${rf.pred_change_pct >= 0 ? '+' : ''}${rf.pred_change_pct?.toFixed(2)}%`, tip: 'XGBoost+LSTM 앙상블이 예측한 내일 종가 변동률 기준 점수입니다. 가장 높은 비중(30%)을 차지합니다.' },
+                        { key: 'trend_score', label: '추세 (MA)', weight: 25, extra: prediction.trend, tip: '5일·10일·20일 이동평균과 현재가의 위치로 계산한 추세 점수입니다. 이동평균 위에 있을수록 양수 점수입니다.' },
+                        { key: 'rsi_score', label: 'RSI', weight: 20, extra: ti?.rsi?.toFixed(1), tip: 'RSI가 30 이하(과매도)면 양수, 70 이상(과매수)면 음수 점수를 부여합니다.' },
+                        { key: 'macd_score', label: 'MACD', weight: 15, extra: ti?.macd_diff >= 0 ? '골든크로스↑' : '데드크로스↓', tip: 'MACD 히스토그램 부호로 모멘텀을 판단합니다. 양수(상승 모멘텀)면 양수 점수입니다.' },
+                        { key: 'bb_score', label: '볼린저밴드', weight: 10, extra: ti?.bb_position != null ? `${(ti.bb_position * 100).toFixed(0)}%` : null, tip: '볼린저밴드 내 위치 기준 점수입니다. 하단(저평가) 근접 시 양수, 상단(과열) 근접 시 음수 점수를 부여합니다.' },
                       ]
                       return (
                         <div className="sd-detail-section">
                           <h4 className="sd-detail-title">투자의견 근거</h4>
                           <div className="sd-detail-content">
-                            {factors.map(({ key, label, weight, extra }) => {
+                            {factors.map(({ key, label, weight, extra, tip }) => {
                               const score = rf[key] ?? 0
                               return (
                                 <div key={key} className="sd-detail-factor">
                                   <div className="sd-detail-factor-header">
-                                    <span className="sd-detail-factor-label">{label}</span>
+                                    <span className="sd-detail-factor-label">{label}{tip && <Tip text={tip} />}</span>
                                     <span className="sd-detail-factor-weight">가중 {weight}%</span>
                                     {extra && <span className="sd-detail-factor-extra">{extra}</span>}
                                     <span className={`sd-detail-factor-score ${score > 0 ? 'price-up' : score < 0 ? 'price-down' : ''}`}>

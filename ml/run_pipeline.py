@@ -8,9 +8,18 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+LOG_DIR = Path(__file__).parent.parent / "logs" / "ml"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+_log_file = LOG_DIR / f"pipeline_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(_log_file, encoding='utf-8'),
+    ]
 )
 logger = logging.getLogger("ml-pipeline")
 

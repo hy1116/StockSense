@@ -24,6 +24,7 @@ from app.schemas.portfolio import (
     StockDetailInfo,
     StockBasicInfo,
     ChartData,
+    ChartCandle,
     MinuteChartData,
     PredictionResult,
     TopStock,
@@ -34,6 +35,7 @@ from app.schemas.portfolio import (
 from app.services.kis_api import get_kis_client, KISAPIClient
 from app.services.prediction import get_prediction_service, PredictionService
 from app.services.redis_client import get_redis_client
+from app.services.naver_finance import get_naver_finance_client
 from app.database import get_db
 from app.models.stock import Stock
 import json
@@ -371,6 +373,75 @@ async def get_stock_intraday(
         raise
     except Exception as e:
         logger.error(f"분봉 조회 실패: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stock/{stock_code}/chart", response_model=list[ChartCandle])
+async def get_stock_chart(
+    stock_code: str,
+    period: str = Query(default="1D", description="1D/1W/1M/3M/1Y"),
+    client: KISAPIClient = Depends(get_kis_client),
+):
+    """차트 데이터 조회 — 1D: KIS 10분봉 / 1W·1M·3M·1Y: Naver fchart 일봉·주봉"""
+    if period not in ("1D", "1W", "1M", "3M", "1Y"):
+        raise HTTPException(status_code=400, detail="Invalid period")
+    try:
+        redis = get_redis_client()
+        cache_key = f"chart:{stock_code}:{period}"
+        ttl = {"1D": 300, "1W": 600, "1M": 3600, "3M": 3600, "1Y": 3600}[period]
+
+        if redis.is_available():
+            cached = redis.get(cache_key)
+            if cached:
+                try:
+                    return [ChartCandle(**i) for i in json.loads(cached)]
+                except Exception:
+                    pass
+
+        if period == "1D":
+            # KIS API 10분봉 (당일)
+            from datetime import date
+            today = date.today().strftime("%Y%m%d")
+            raw = await run_sync(client.get_minute_chart, stock_code, interval=10)
+            candles = []
+            if raw.get("rt_cd") == "0":
+                seen = set()
+                for item in raw.get("output2", []):
+                    t = item.get("stck_cntg_hour", "")
+                    if not t or len(t) < 4:
+                        continue
+                    hhmm = t[:4]
+                    if hhmm in seen:
+                        continue
+                    seen.add(hhmm)
+                    o = int(item.get("stck_oprc", 0))
+                    c = int(item.get("stck_prpr", 0))
+                    if o <= 0 or c <= 0:
+                        continue
+                    candles.append(ChartCandle(
+                        dt=today + hhmm,
+                        open=o,
+                        high=int(item.get("stck_hgpr", 0)),
+                        low=int(item.get("stck_lwpr", 0)),
+                        close=c,
+                        volume=int(item.get("cntg_vol", 0)),
+                    ))
+                candles.sort(key=lambda x: x.dt)
+            result = candles
+        else:
+            # Naver fchart (1W/1M/3M/1Y)
+            naver = get_naver_finance_client()
+            data = await naver.get_chart(stock_code, period)
+            result = [ChartCandle(**i) for i in data]
+
+        if redis.is_available() and result:
+            redis.set(cache_key, json.dumps([i.model_dump() for i in result]), expire=ttl)
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"차트 조회 실패 {stock_code}/{period}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
