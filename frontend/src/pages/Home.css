@@ -271,6 +271,13 @@
   background: rgba(100, 108, 255, 0.1);
 }
 
+.search-dropdown-empty {
+  padding: 0.75rem 1rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
 .dropdown-name {
   flex: 1;
   font-weight: 600;
@@ -799,6 +806,10 @@
   .search-dropdown-item:hover,
   .search-dropdown-item.selected {
     background: rgba(100, 108, 255, 0.08);
+  }
+
+  .search-dropdown-empty {
+    color: rgba(17, 24, 39, 0.45);
   }
 
   .dropdown-name {

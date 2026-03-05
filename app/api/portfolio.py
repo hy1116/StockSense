@@ -50,7 +50,7 @@ async def search_stocks(
     limit: int = Query(default=10, ge=1, le=30, description="최대 결과 수"),
     db: AsyncSession = Depends(get_db)
 ):
-    """종목명 또는 코드로 검색 (DB 기반)"""
+    """종목명 또는 코드로 검색 (DB 기반, DB 결과 없으면 네이버 자동완성 폴백)"""
     try:
         search_term = q.strip()
 
@@ -65,29 +65,35 @@ async def search_stocks(
         result = await db.execute(query)
         stocks = result.scalars().all()
 
-        # 정렬: 완전 일치 우선, 시작 일치 그 다음
-        def sort_key(stock):
-            if stock.stock_code == search_term:
-                return (0, stock.stock_name)
-            elif stock.stock_name == search_term:
-                return (1, stock.stock_name)
-            elif stock.stock_code.startswith(search_term):
-                return (2, stock.stock_name)
-            elif stock.stock_name.startswith(search_term):
-                return (3, stock.stock_name)
-            else:
-                return (4, stock.stock_name)
+        if stocks:
+            # 정렬: 완전 일치 우선, 시작 일치 그 다음
+            def sort_key(stock):
+                if stock.stock_code == search_term:
+                    return (0, stock.stock_name)
+                elif stock.stock_name == search_term:
+                    return (1, stock.stock_name)
+                elif stock.stock_code.startswith(search_term):
+                    return (2, stock.stock_name)
+                elif stock.stock_name.startswith(search_term):
+                    return (3, stock.stock_name)
+                else:
+                    return (4, stock.stock_name)
 
-        sorted_stocks = sorted(stocks, key=sort_key)
-
-        results = [
-            StockSearchItem(
-                stock_code=stock.stock_code,
-                stock_name=stock.stock_name,
-                market=stock.market
-            )
-            for stock in sorted_stocks
-        ]
+            sorted_stocks = sorted(stocks, key=sort_key)
+            results = [
+                StockSearchItem(
+                    stock_code=stock.stock_code,
+                    stock_name=stock.stock_name,
+                    market=stock.market
+                )
+                for stock in sorted_stocks
+            ]
+        else:
+            # DB에 없으면 네이버 자동완성 API 폴백
+            logger.info(f"DB search empty for '{search_term}', falling back to Naver autocomplete")
+            naver = get_naver_finance_client()
+            naver_results = await naver.search_stocks(search_term, limit)
+            results = [StockSearchItem(**item) for item in naver_results]
 
         return StockSearchResponse(results=results, total=len(results))
 

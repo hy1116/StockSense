@@ -135,10 +135,17 @@ function Home() {
     e.preventDefault()
     if (selectedIndex >= 0 && searchResults[selectedIndex]) {
       navigate(`/stock/${searchResults[selectedIndex].stock_code}`)
-    } else if (searchTerm.trim()) {
-      navigate(`/stock/${searchTerm.toUpperCase()}`)
+      setShowDropdown(false)
+    } else if (searchResults.length === 1) {
+      // 결과가 하나면 바로 이동
+      navigate(`/stock/${searchResults[0].stock_code}`)
+      setShowDropdown(false)
+    } else if (searchTerm.trim().match(/^\d{6}$/)) {
+      // 6자리 숫자면 종목코드로 직접 이동
+      navigate(`/stock/${searchTerm.trim()}`)
+      setShowDropdown(false)
     }
-    setShowDropdown(false)
+    // 결과 없거나 이름 검색인 경우 드롭다운 유지 (잘못된 URL 이동 방지)
   }
 
   const handleKeyDown = (e) => {
@@ -262,24 +269,30 @@ function Home() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
-              onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+              onFocus={() => searchTerm.trim().length >= 1 && setShowDropdown(true)}
               className="search-input"
             />
           </form>
-          {showDropdown && searchResults.length > 0 && (
+          {showDropdown && (
             <div className="search-dropdown">
-              {searchResults.map((stock, index) => (
-                <div
-                  key={stock.stock_code}
-                  className={`search-dropdown-item ${index === selectedIndex ? 'selected' : ''}`}
-                  onClick={() => handleResultClick(stock.stock_code)}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                >
-                  <span className="dropdown-name">{stock.stock_name}</span>
-                  <span className="dropdown-code">{stock.stock_code}</span>
-                  {stock.market && <span className="dropdown-market">{stock.market}</span>}
-                </div>
-              ))}
+              {isSearching ? (
+                <div className="search-dropdown-empty">검색 중...</div>
+              ) : searchResults.length > 0 ? (
+                searchResults.map((stock, index) => (
+                  <div
+                    key={stock.stock_code}
+                    className={`search-dropdown-item ${index === selectedIndex ? 'selected' : ''}`}
+                    onClick={() => handleResultClick(stock.stock_code)}
+                    onMouseEnter={() => setSelectedIndex(index)}
+                  >
+                    <span className="dropdown-name">{stock.stock_name}</span>
+                    <span className="dropdown-code">{stock.stock_code}</span>
+                    {stock.market && <span className="dropdown-market">{stock.market}</span>}
+                  </div>
+                ))
+              ) : (
+                <div className="search-dropdown-empty">검색 결과가 없습니다</div>
+              )}
             </div>
           )}
         </div>

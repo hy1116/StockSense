@@ -171,6 +171,36 @@ class NaverFinanceClient:
             logger.error(f"[fchart] {stock_code}/{period}: {e}")
             return []
 
+    async def search_stocks(self, query: str, limit: int = 10) -> list[dict]:
+        """네이버 금융 자동완성 API로 종목 검색 (DB 폴백용)
+
+        Args:
+            query: 검색어 (종목명 또는 코드)
+            limit: 최대 결과 수
+
+        Returns:
+            [{"stock_code": "005930", "stock_name": "삼성전자", "market": "KOSPI"}, ...]
+        """
+        url = "https://ac.stock.naver.com/ac"
+        params = {"q": query, "target": "stock"}
+        try:
+            resp = await self._client.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            results = []
+            # items: [["종목명", "코드", "타입", "시장"], ...]
+            for item in data.get("items", [])[:limit]:
+                if len(item) < 2:
+                    continue
+                name, code = item[0], item[1]
+                market_flag = item[3] if len(item) > 3 else ""
+                market = "KOSDAQ" if market_flag == "1" else "KOSPI"
+                results.append({"stock_code": code, "stock_name": name, "market": market})
+            return results
+        except Exception as e:
+            logger.error(f"[Naver] Search failed for '{query}': {e}")
+            return []
+
     async def close(self):
         await self._client.aclose()
 
