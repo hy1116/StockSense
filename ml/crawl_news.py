@@ -305,4 +305,6 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    from ml.logger import TeeStdout
+    with TeeStdout("crawl_news"):
+        asyncio.run(main())

@@ -255,14 +255,14 @@ def main():
 
     args = parser.parse_args()
 
-    collector = HistoricalDataCollector()
+    from ml.logger import TeeStdout
+    with TeeStdout("collect_historical_data"):
+        collector = HistoricalDataCollector()
 
-    if args.stock:
-        # 단일 종목 수집
-        collector.collect_single_stock(args.stock, args.days, args.format)
-    else:
-        # 주요 종목 전체 수집
-        collector.collect_all_major_stocks(args.days, args.format)
+        if args.stock:
+            collector.collect_single_stock(args.stock, args.days, args.format)
+        else:
+            collector.collect_all_major_stocks(args.days, args.format)
 
 
 if __name__ == "__main__":

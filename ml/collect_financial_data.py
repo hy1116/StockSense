@@ -24,11 +24,8 @@ if sys.platform == "win32":
 # 프로젝트 루트를 Python path에 추가
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+from ml.logger import get_logger
+logger = get_logger("collect_financial_data")
 
 
 def fetch_krx_financial_data() -> Optional[object]:

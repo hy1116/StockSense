@@ -48,16 +48,8 @@ from sqlalchemy.orm import sessionmaker
 from app.config import get_settings
 from app.models.ml_model import ModelTrainingHistory
 
-# 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('logs/daily_train.log', encoding='utf-8')
-    ]
-)
-logger = logging.getLogger(__name__)
+from ml.logger import get_logger
+logger = get_logger("daily_train_batch")
 
 # LSTM 윈도우 크기
 LSTM_WINDOW_SIZE = 20

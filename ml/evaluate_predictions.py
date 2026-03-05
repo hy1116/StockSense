@@ -14,11 +14,8 @@ load_dotenv()
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("evaluate-predictions")
+from ml.logger import get_logger
+logger = get_logger("evaluate_predictions")
 
 
 def get_db_session():

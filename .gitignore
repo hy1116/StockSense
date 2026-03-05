@@ -61,4 +61,4 @@ guide/
 scripts/
 
 # k8s
-secrets.yaml
+secrets.yamllogs/

@@ -354,8 +354,9 @@ class StockPredictionTrainer:
 
         return model, metadata
 
-# 실행 예시
-if __name__ == '__main__':
+def main():
+    from ml.logger import TeeStdout
+
     parser = argparse.ArgumentParser(description='Stock Prediction Model Training')
     parser.add_argument('--stock-code', '-s', type=str, default=None,
                         help='Specific stock code to train (default: all stocks)')
@@ -370,21 +371,24 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    trainer = StockPredictionTrainer(
-        data_dir=args.data_dir,
-        model_dir=args.model_dir,
-        save_to_db=not args.no_db
-    )
+    with TeeStdout("train_model"):
+        trainer = StockPredictionTrainer(
+            data_dir=args.data_dir,
+            model_dir=args.model_dir,
+            save_to_db=not args.no_db
+        )
 
-    # 학습 실행
-    model, metadata = trainer.train(
-        stock_code=args.stock_code,
-        activate_anyway=args.activate_anyway
-    )
+        model, metadata = trainer.train(
+            stock_code=args.stock_code,
+            activate_anyway=args.activate_anyway
+        )
 
-    # 결과 요약
-    print(f"\n📋 Training Summary:")
-    print(f"   Model: {metadata['model_name']}")
-    print(f"   Test R² Score: {metadata['test_score']:.4f}")
-    print(f"   Samples: {metadata['n_samples']}")
-    print(f"   DB Saved: {trainer.save_to_db}")
+        print(f"\n📋 Training Summary:")
+        print(f"   Model: {metadata['model_name']}")
+        print(f"   Test R² Score: {metadata['test_score']:.4f}")
+        print(f"   Samples: {metadata['n_samples']}")
+        print(f"   DB Saved: {trainer.save_to_db}")
+
+
+if __name__ == '__main__':
+    main()

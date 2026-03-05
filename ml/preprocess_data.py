@@ -398,20 +398,20 @@ class DataPreprocessor:
 
 def main():
     import argparse
+    from ml.logger import TeeStdout
 
     parser = argparse.ArgumentParser(description="데이터 전처리 및 피처 생성")
     parser.add_argument("--stock", type=str, help="특정 종목만 처리 (예: 005930)")
 
     args = parser.parse_args()
 
-    preprocessor = DataPreprocessor()
+    with TeeStdout("preprocess_data"):
+        preprocessor = DataPreprocessor()
 
-    if args.stock:
-        # 특정 종목만 처리
-        preprocessor.preprocess_stock(args.stock, save=True)
-    else:
-        # 전체 파이프라인 실행
-        preprocessor.process_all()
+        if args.stock:
+            preprocessor.preprocess_stock(args.stock, save=True)
+        else:
+            preprocessor.process_all()
 
 
 if __name__ == "__main__":

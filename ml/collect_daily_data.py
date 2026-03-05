@@ -14,6 +14,8 @@ if sys.platform == "win32":
 # .env 파일 로드
 load_dotenv()
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from ml.logger import TeeStdout
 from app.services.kis_api import KISAPIClient
 from ml.stock_repository import StockRepository
 import pandas as pd
@@ -208,8 +210,9 @@ def main():
 
     args = parser.parse_args()
 
-    collector = DailyDataCollector()
-    collector.collect_all(update_historical=not args.no_update_historical)
+    with TeeStdout("collect_daily_data"):
+        collector = DailyDataCollector()
+        collector.collect_all(update_historical=not args.no_update_historical)
 
 
 if __name__ == "__main__":
