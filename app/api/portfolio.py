@@ -432,13 +432,18 @@ async def get_stock_chart(
                     seen.add(hhmm)
                     o = int(item.get("stck_oprc", 0))
                     c = int(item.get("stck_prpr", 0))
-                    if o <= 0 or c <= 0:
+                    h = int(item.get("stck_hgpr", 0))
+                    l = int(item.get("stck_lwpr", 0))
+                    # OHLCV 기본 유효성 검사 (0 또는 비정상 OHLCV 제거)
+                    if o <= 0 or c <= 0 or h <= 0 or l <= 0:
+                        continue
+                    if h < max(o, c) or l > min(o, c):
                         continue
                     candles.append(ChartCandle(
                         dt=today + hhmm,
                         open=o,
-                        high=int(item.get("stck_hgpr", 0)),
-                        low=int(item.get("stck_lwpr", 0)),
+                        high=h,
+                        low=l,
                         close=c,
                         volume=int(item.get("cntg_vol", 0)),
                     ))

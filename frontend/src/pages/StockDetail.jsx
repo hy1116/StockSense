@@ -682,50 +682,6 @@ function StockDetail() {
         </div>
       </section>
 
-      {/* 투자 정보 카드 */}
-      <section className="sd-card">
-        <h2>투자 정보</h2>
-        <div className="sd-info-table">
-          <div className="sd-info-row">
-            <span className="sd-info-key">현재가</span>
-            <span className={`sd-info-val ${getPriceChangeClass(basic_info.change_price)}`}>
-              {formatPrice(basic_info.current_price)}
-            </span>
-          </div>
-          <div className="sd-info-row">
-            <span className="sd-info-key">전일대비</span>
-            <span className={`sd-info-val ${getPriceChangeClass(basic_info.change_price)}`}>
-              {basic_info.change_price > 0 ? '+' : ''}{formatPrice(basic_info.change_price)}
-              <span className="sd-info-sub">
-                ({basic_info.change_rate > 0 ? '+' : ''}{basic_info.change_rate.toFixed(2)}%)
-              </span>
-            </span>
-          </div>
-          <div className="sd-info-row">
-            <span className="sd-info-key">거래량</span>
-            <span className="sd-info-val">{formatNumber(basic_info.volume)}주</span>
-          </div>
-          {basic_info.hts_avls && (
-            <div className="sd-info-row">
-              <span className="sd-info-key">HTS 시가총액</span>
-              <span className="sd-info-val">{formatMarketCap(basic_info.hts_avls)}</span>
-            </div>
-          )}
-          {basic_info.per && (
-            <div className="sd-info-row">
-              <span className="sd-info-key">PER</span>
-              <span className="sd-info-val">{basic_info.per.toFixed(2)}배</span>
-            </div>
-          )}
-          {basic_info.pbr && (
-            <div className="sd-info-row">
-              <span className="sd-info-key">PBR</span>
-              <span className="sd-info-val">{basic_info.pbr.toFixed(2)}배</span>
-            </div>
-          )}
-        </div>
-      </section>
-
       {/* AI 예측 */}
       {prediction && (
         <section className="sd-card">

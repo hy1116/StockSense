@@ -1797,6 +1797,7 @@
   .sd-detail-rsi-labels { color: rgba(17, 24, 39, 0.35); }
   .sd-detail-rsi-num { color: #111827; }
   .zone-neutral { background: rgba(0, 0, 0, 0.07); }
+  .signal-neutral { color: rgba(17, 24, 39, 0.4); }
   .sd-detail-bb-track {
     background: linear-gradient(to right,
       rgba(59, 130, 246, 0.35) 0%,

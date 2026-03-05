@@ -2,11 +2,15 @@
 
 미평가 예측 레코드를 찾아 실제 종가와 비교하여 적중률을 계산합니다.
 run_pipeline.py 에서 데이터 수집 직후에 실행됩니다.
+
+실제 종가 조회: Naver fchart API (인증 불필요, KIS API 의존성 제거)
 """
 import sys
 import os
+import ast
 import logging
-from datetime import datetime, date
+import requests
+from datetime import datetime, date, timedelta
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -16,6 +20,9 @@ from sqlalchemy.orm import sessionmaker
 
 from ml.logger import get_logger
 logger = get_logger("evaluate_predictions")
+
+_NAVER_FCHART_URL = "https://fchart.stock.naver.com/siseJson.nhn"
+_NAVER_HEADERS = {"Referer": "https://finance.naver.com/"}
 
 
 def get_db_session():
@@ -32,61 +39,52 @@ def get_db_session():
     return Session()
 
 
-def get_kis_client():
-    """KIS API 클라이언트 생성"""
-    from app.services.kis_api import KISAPIClient
-
-    app_key = os.getenv("KIS_APP_KEY")
-    app_secret = os.getenv("KIS_APP_SECRET")
-    account_number = os.getenv("KIS_ACCOUNT_NUMBER")
-    account_product_code = os.getenv("KIS_ACCOUNT_PRODUCT_CODE", "01")
-    base_url = os.getenv("KIS_BASE_URL", "https://openapi.koreainvestment.com:9443")
-    use_mock = os.getenv("KIS_USE_MOCK", "True").lower() == "true"
-    cust_type = os.getenv("KIS_CUST_TYPE", "P")
-
-    if not app_key or not app_secret or not account_number:
-        raise ValueError("KIS API credentials not found in environment variables.")
-
-    return KISAPIClient(
-        app_key=app_key,
-        app_secret=app_secret,
-        account_number=account_number,
-        account_product_code=account_product_code,
-        base_url=base_url,
-        use_mock=use_mock,
-        cust_type=cust_type,
-    )
-
-
-def get_actual_price(kis_client, stock_code: str, target_date: str) -> float | None:
-    """KIS API에서 특정 날짜의 실제 종가를 조회
+def get_actual_price(stock_code: str, target_date: str) -> float | None:
+    """Naver fchart API로 특정 날짜의 실제 종가 조회 (인증 불필요)
 
     Args:
-        kis_client: KIS API 클라이언트
         stock_code: 종목 코드
         target_date: 조회 날짜 (YYYY-MM-DD)
 
     Returns:
-        실제 종가 (없으면 None)
+        실제 종가 (없으면 None — 휴장일 포함)
     """
     try:
-        chart_data = kis_client.get_daily_chart(stock_code, period="D", count=10)
-        if not chart_data or "output2" not in chart_data:
-            return None
+        target_dt = datetime.strptime(target_date, "%Y-%m-%d")
+        target_yyyymmdd = target_dt.strftime("%Y%m%d")
+        # 넉넉하게 30일 전부터 조회 (휴장일 연속 구간 대비)
+        start_yyyymmdd = (target_dt - timedelta(days=30)).strftime("%Y%m%d")
 
-        # target_date를 YYYYMMDD 형식으로 변환
-        target_yyyymmdd = target_date.replace("-", "")
+        params = {
+            "symbol": stock_code,
+            "requestType": "1",
+            "startTime": start_yyyymmdd,
+            "endTime": target_yyyymmdd,
+            "timeframe": "day",
+        }
+        resp = requests.get(
+            _NAVER_FCHART_URL, params=params,
+            headers=_NAVER_HEADERS, timeout=10
+        )
+        resp.raise_for_status()
 
-        for item in chart_data["output2"]:
-            item_date = item.get("stck_bsop_date", "")
-            if item_date == target_yyyymmdd:
-                close_price = int(item.get("stck_clpr", 0))
-                if close_price > 0:
-                    return float(close_price)
+        # 응답이 Python 리터럴(single-quote 혼재) → ast로 파싱
+        raw = resp.text.replace("null", "None")
+        rows = ast.literal_eval(raw.strip())
 
-        return None
+        for row in rows[1:]:  # 첫 행은 한글 헤더
+            if not row or row[0] is None:
+                continue
+            if str(row[0]) == target_yyyymmdd:
+                close = row[4]  # [날짜, 시가, 고가, 저가, 종가, 거래량]
+                if close is not None and close > 0:
+                    return float(close)
+                return None  # 해당 날짜 데이터 있으나 종가 0
+
+        return None  # 해당 날짜 없음 (휴장일)
+
     except Exception as e:
-        logger.warning(f"종가 조회 실패 ({stock_code} / {target_date}): {e}")
+        logger.warning(f"Naver 종가 조회 실패 ({stock_code} / {target_date}): {e}")
         return None
 
 
@@ -114,50 +112,46 @@ def evaluate():
 
         logger.info(f"평가 대상: {len(rows)}건")
 
-        kis_client = get_kis_client()
         evaluated = 0
         failed = 0
 
-        # 종목별로 그룹핑하여 API 호출 최소화
-        stock_prices = {}
+        # 종목+날짜 조합별로 캐싱 (동일 조합 중복 API 호출 방지)
+        price_cache: dict[str, float | None] = {}
 
         for row in rows:
             pred_id = row.id
             stock_code = row.stock_code
-            prediction_date = row.prediction_date
+            prediction_date = row.prediction_date  # YYYY-MM-DD
             predicted_price = row.predicted_price
-            current_price = row.current_price  # 예측 시점의 현재가
+            current_price = row.current_price
 
             cache_key = f"{stock_code}_{prediction_date}"
-            if cache_key not in stock_prices:
-                actual = get_actual_price(kis_client, stock_code, prediction_date)
-                stock_prices[cache_key] = actual
+            if cache_key not in price_cache:
+                price_cache[cache_key] = get_actual_price(stock_code, prediction_date)
 
-            actual_price = stock_prices[cache_key]
+            actual_price = price_cache[cache_key]
 
             if actual_price is None:
-                logger.warning(f"실제 종가를 찾을 수 없음: {stock_code} / {prediction_date}")
+                logger.warning(f"실제 종가를 찾을 수 없음 (휴장일?): {stock_code} / {prediction_date}")
                 failed += 1
                 continue
 
             # 오차율: (예측가 - 실제가) / 실제가 * 100
             error_rate = (predicted_price - actual_price) / actual_price * 100
 
-            # 방향 적중: (예측가 > 현재가) == (실제가 > 현재가)
+            # 방향 적중: 예측 방향(상승/하락)이 실제와 일치하는지
             if current_price and current_price > 0:
-                predicted_up = predicted_price > current_price
-                actual_up = actual_price > current_price
-                direction_correct = predicted_up == actual_up
+                direction_correct = (predicted_price > current_price) == (actual_price > current_price)
             else:
                 direction_correct = None
 
             session.execute(
                 text("""
                     UPDATE predictions
-                    SET actual_price = :actual_price,
-                        error_rate = :error_rate,
+                    SET actual_price      = :actual_price,
+                        error_rate        = :error_rate,
                         direction_correct = :direction_correct,
-                        is_evaluated = true
+                        is_evaluated      = true
                     WHERE id = :id
                 """),
                 {

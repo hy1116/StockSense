@@ -458,11 +458,13 @@ class KISAPIClient:
     def _merge_candles(self, candles: List[Dict], time_key: str) -> Dict:
         """여러 캔들을 하나로 병합 (OHLCV)"""
         first = candles[0]
+        highs = [int(c.get("stck_hgpr", 0)) for c in candles if int(c.get("stck_hgpr", 0)) > 0]
+        lows  = [int(c.get("stck_lwpr", 0)) for c in candles if int(c.get("stck_lwpr", 0)) > 0]
         return {
             "stck_cntg_hour": time_key,
             "stck_oprc": first.get("stck_oprc", "0"),
-            "stck_hgpr": str(max(int(c.get("stck_hgpr", 0)) for c in candles)),
-            "stck_lwpr": str(min(int(c.get("stck_lwpr", 0)) for c in candles)),
+            "stck_hgpr": str(max(highs)) if highs else "0",
+            "stck_lwpr": str(min(lows))  if lows  else "0",
             "stck_prpr": candles[-1].get("stck_prpr", "0"),
             "cntg_vol": str(sum(int(c.get("cntg_vol", 0)) for c in candles)),
         }
