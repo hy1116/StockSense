@@ -41,6 +41,20 @@ git pull origin main || {
 # ============================================
 echo "▶ [1/9] Building Docker images..."
 
+echo "   Building Backend image..."
+docker build -t stocksense-backend:latest -f app/Dockerfile . || {
+    error "Backend image build failed"
+    exit 1
+}
+success "Backend image built"
+
+echo "   Building Frontend image..."
+docker build -t stocksense-frontend:latest -f frontend/Dockerfile ./frontend || {
+    error "Frontend image build failed"
+    exit 1
+}
+success "Frontend image built"
+
 echo "   Building ML image..."
 docker build -t stocksense-ml:latest -f ml/Dockerfile . || {
     warn "ML image build failed, skipping..."
@@ -117,7 +131,25 @@ kubectl wait --for=jsonpath='{.status.phase}'=Succeeded workflow/$WF_NAME -n sto
     exit 1
 }
 
-# success "Database migration completed ($WF_NAME)"
+success "Database migration completed ($WF_NAME)"
+
+# ============================================
+# 6. 백엔드/프론트엔드/Kafka 배포
+# ============================================
+echo ""
+echo "▶ [6/9] Deploying Backend, Frontend, Kafka..."
+kubectl apply -f k8s/kafka-deployment.yaml
+kubectl apply -f k8s/backend-deployment.yaml
+kubectl apply -f k8s/frontend-deployment.yaml
+echo "   Waiting for Backend to be ready..."
+kubectl wait --for=condition=ready pod -l app=backend -n stocksense --timeout=120s || {
+    warn "Backend may not be ready yet, continuing..."
+}
+echo "   Waiting for Frontend to be ready..."
+kubectl wait --for=condition=ready pod -l app=frontend -n stocksense --timeout=60s || {
+    warn "Frontend may not be ready yet, continuing..."
+}
+success "Backend, Frontend, Kafka deployed"
 
 # ============================================
 # 7. Ingress 설정
