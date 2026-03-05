@@ -5,7 +5,7 @@ metadata:
   namespace: stocksense
 spec:
   replicas: 2
-  strategy: # 1. 배포 전략 최적화
+  strategy:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
@@ -21,8 +21,8 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
       - name: backend
-        image: stocksense-backend:latest  # Docker 이미지를 빌드하고 레지스트리에 푸시한 후 여기에 이미지 경로를 입력하세요
-        lifecycle: # 2. Graceful Shutdown 설정
+        image: stocksense-backend:latest
+        lifecycle:
           preStop:
             exec:
               command: ["sh", "-c", "sleep 10"]
@@ -70,56 +70,30 @@ spec:
               name: stocksense-config
               key: KAFKA_BOOTSTRAP_SERVERS
         volumeMounts:
+        # models-storage: DB 로드 실패 시 fallback 전용 (emptyDir → 재시작 시 DB에서 재로드)
         - name: models-storage
           mountPath: /app/models
-        - name: data-storage
-          mountPath: /app/data
+        # data-storage 제거: /app/data는 ML 파이프라인(Argo)만 사용하며
+        # Argo는 ml-data-pvc를 별도로 마운트함. 백엔드 API는 이 경로를 사용하지 않음.
         livenessProbe:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 60
+          initialDelaySeconds: 90   # ML 모델 로딩 시간 고려
           periodSeconds: 10
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60   # DB 연결 + Kafka 초기화 + 모델 로딩 고려
           periodSeconds: 5
+          failureThreshold: 6       # 최대 90초(60+6×5)까지 허용
       volumes:
+      # emptyDir: ReadWriteOnce PVC 제거 → 복수 레플리카 문제 해소
+      # 파드 재시작 시 /app/models는 비워지지만 prediction.py가 DB에서 재로드함
       - name: models-storage
-        persistentVolumeClaim:
-          claimName: models-pvc
-      - name: data-storage
-        persistentVolumeClaim:
-          claimName: data-pvc
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: models-pvc
-  namespace: stocksense
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: local-path
-  resources:
-    requests:
-      storage: 2Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: data-pvc
-  namespace: stocksense
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: local-path
-  resources:
-    requests:
-      storage: 2Gi
----
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
