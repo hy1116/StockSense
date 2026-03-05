@@ -372,7 +372,12 @@ class KISAPIClient:
             if not output2:
                 break
 
-            all_output2.extend(output2)
+            # 09:00 이전 데이터는 이전 날 데이터일 수 있으므로 제외 후 추가
+            session_items = [
+                item for item in output2
+                if item.get("stck_cntg_hour", "") >= "090000"
+            ]
+            all_output2.extend(session_items)
 
             # 마지막 데이터의 시간을 다음 조회 기준으로 사용
             last_time = output2[-1].get("stck_cntg_hour", "")
@@ -414,6 +419,16 @@ class KISAPIClient:
 
         # 시간순 정렬 (API는 역순이므로)
         sorted_data = sorted(data, key=lambda x: x.get("stck_cntg_hour", ""))
+
+        # 페이징 중복 제거 (동일 체결 시간이 여러 페이지에 포함될 수 있음)
+        seen_times: set = set()
+        deduped: List[Dict] = []
+        for item in sorted_data:
+            t = item.get("stck_cntg_hour", "")
+            if t not in seen_times:
+                seen_times.add(t)
+                deduped.append(item)
+        sorted_data = deduped
 
         aggregated = []
         bucket = []

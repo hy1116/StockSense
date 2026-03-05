@@ -443,11 +443,23 @@ function StockDetail() {
 
     let candleResult = []
     let volumeResult = []
+    let prevClose = null  // 1D: 이전 캔들 종가 (시가 보정용)
 
     chartCandles.forEach(d => {
+      // 비정상 OHLCV 필터링
+      if (!d.open || !d.close || !d.high || !d.low) return
+
+      // 1D 당일 분봉: KIS API stck_oprc는 일봉 시가이므로 이전 캔들 종가로 보정
+      // 단, [low, high] 범위를 벗어나지 않도록 클리핑
+      const open = (isIntraday && prevClose !== null)
+        ? Math.min(Math.max(prevClose, d.low), d.high)
+        : d.open
+
+      if (d.high < Math.max(open, d.close) || d.low > Math.min(open, d.close)) return
+
       let time
       if (isIntraday) {
-        // dt = YYYYMMDDHHMM (12자리)
+        // dt = YYYYMMDDHHMM (12자리), KST 시간을 UTC+0 timestamp로 처리 (차트 축 표시용)
         const year  = parseInt(d.dt.slice(0, 4))
         const month = parseInt(d.dt.slice(4, 6)) - 1
         const day   = parseInt(d.dt.slice(6, 8))
@@ -458,8 +470,9 @@ function StockDetail() {
         // dt = YYYYMMDD (8자리)
         time = `${d.dt.slice(0, 4)}-${d.dt.slice(4, 6)}-${d.dt.slice(6, 8)}`
       }
-      const up = d.close >= d.open
-      candleResult.push({ time, open: d.open, high: d.high, low: d.low, close: d.close })
+      prevClose = d.close
+      const up = d.close >= open
+      candleResult.push({ time, open, high: d.high, low: d.low, close: d.close })
       volumeResult.push({ time, value: d.volume, color: up ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)' })
     })
 
@@ -501,13 +514,12 @@ function StockDetail() {
     }
   }, [initChart])
 
-  // 장 운영 시간 체크 함수 (09:00 ~ 15:30)
+  // 장 운영 시간 체크 함수 (KST 09:00 ~ 15:30)
   const isMarketOpen = () => {
     const now = new Date()
-    const hours = now.getHours()
-    const minutes = now.getMinutes()
-    const currentTime = hours * 100 + minutes
-    return currentTime >= 900 && currentTime <= 1530
+    const kstMinutes = (now.getUTCHours() * 60 + now.getUTCMinutes() + 9 * 60) % (24 * 60)
+    const kstTime = Math.floor(kstMinutes / 60) * 100 + (kstMinutes % 60)
+    return kstTime >= 900 && kstTime <= 1530
   }
 
   // 차트 데이터 조회 (네이버 금융)
