@@ -1,7 +1,7 @@
 """재무 데이터 수집 스크립트
 
 KRX 전체 종목의 PER/PBR/EPS/BPS/DIV를 FinanceDataReader로 일괄 수집하고,
-Naver Finance 비공식 API로 ROE/매출/영업이익/순이익을 보완하여 DB에 UPSERT.
+DART OpenAPI로 ROE/매출/영업이익/순이익을 보완하여 DB에 UPSERT.
 
 Usage:
     python ml/collect_financial_data.py
@@ -9,11 +9,15 @@ Usage:
 """
 import sys
 import os
+import io
 import time
+import pickle
+import zipfile
 import argparse
 import logging
+import xml.etree.ElementTree as ET
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 # Windows 콘솔 인코딩 설정
@@ -57,68 +61,132 @@ def fetch_krx_financial_data() -> Optional[object]:
     return None
 
 
-def fetch_naver_financial(stock_code: str) -> dict:
-    """Naver Finance 비공식 API로 ROE/매출/영업이익/순이익 수집"""
-    try:
-        import requests
-        url = f"https://api.finance.naver.com/service/itemSummary.nhn?itemcode={stock_code}"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Referer': f'https://finance.naver.com/item/main.nhn?code={stock_code}'
-        }
-        resp = requests.get(url, headers=headers, timeout=5)
-        if resp.status_code != 200:
-            return {}
+DART_CORP_CODE_CACHE = "/tmp/dart_corp_codes.pkl"
 
-        data = resp.json()
-        result = {}
+REVENUE_ACCOUNT_NAMES = ['매출액', '수익(매출액)', '영업수익', '매출']
+OP_PROFIT_ACCOUNT_NAMES = ['영업이익', '영업이익(손실)']
+NET_PROFIT_ACCOUNT_NAMES = ['당기순이익', '당기순이익(손실)', '분기순이익']
 
-        # PER, PBR, EPS (FDR 폴백용)
-        for key, field in [('per', 'per'), ('pbr', 'pbr'), ('eps', 'eps')]:
-            val = data.get(field)
-            if val is not None:
+
+def fetch_dart_corp_code_map(api_key: str) -> dict:
+    """DART corp_code ↔ stock_code 매핑 다운로드 (일 1회 캐시)"""
+    import requests
+
+    cache_file = Path(DART_CORP_CODE_CACHE)
+    if cache_file.exists():
+        mtime = datetime.fromtimestamp(cache_file.stat().st_mtime)
+        if datetime.now() - mtime < timedelta(days=1):
+            with open(cache_file, 'rb') as f:
+                return pickle.load(f)
+
+    logger.info("DART corp_code 매핑 다운로드 중...")
+    url = f"https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key={api_key}"
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        xml_data = zf.read('CORPCODE.xml')
+
+    root = ET.fromstring(xml_data)
+    mapping = {}
+    for item in root.findall('list'):
+        stock_code = item.findtext('stock_code', '').strip()
+        corp_code = item.findtext('corp_code', '').strip()
+        if stock_code and len(stock_code) == 6:
+            mapping[stock_code] = corp_code
+
+    with open(cache_file, 'wb') as f:
+        pickle.dump(mapping, f)
+
+    logger.info(f"DART corp_code 매핑 완료: {len(mapping)}개 종목")
+    return mapping
+
+
+def _dart_get_amount(items: list, account_names: list) -> Optional[float]:
+    """재무제표 항목 리스트에서 계정과목명으로 당기 금액(억원) 추출"""
+    for item in items:
+        if item.get('account_nm') in account_names:
+            val = item.get('thstrm_amount', '').replace(',', '').strip()
+            if val and val not in ('-', ''):
                 try:
-                    result[key] = float(val)
-                except (ValueError, TypeError):
+                    return float(val) / 1e8  # 원 → 억원
+                except ValueError:
                     pass
+    return None
 
-        # ROE
-        roe_val = data.get('roe')
-        if roe_val is not None:
+
+def fetch_dart_financials(api_key: str, corp_code: str) -> dict:
+    """DART API로 최근 연간 재무제표(매출/영업이익/순이익) + 재무지표(ROE) 수집"""
+    import requests
+
+    result = {}
+    current_year = date.today().year
+
+    # 재무제표: 연결(CFS) 우선, 없으면 별도(OFS). 작년 → 재작년 순으로 시도
+    for year in [current_year - 1, current_year - 2]:
+        if result.get('revenue') is not None:
+            break
+        for fs_div in ['CFS', 'OFS']:
             try:
-                result['roe'] = float(roe_val)
-            except (ValueError, TypeError):
-                pass
+                resp = requests.get(
+                    "https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json",
+                    params={
+                        'crtfc_key': api_key,
+                        'corp_code': corp_code,
+                        'bsns_year': str(year),
+                        'reprt_code': '11011',  # 사업보고서
+                        'fs_div': fs_div,
+                    },
+                    timeout=10,
+                )
+                data = resp.json()
+                if data.get('status') != '000' or not data.get('list'):
+                    continue
 
-        # 매출액 (억원 단위로 변환: 네이버 API는 백만원 단위)
-        sales = data.get('sales')
-        if sales is not None:
-            try:
-                result['revenue'] = float(sales) / 100  # 백만 → 억
-            except (ValueError, TypeError):
-                pass
+                items = data['list']
+                revenue = _dart_get_amount(items, REVENUE_ACCOUNT_NAMES)
+                op_profit = _dart_get_amount(items, OP_PROFIT_ACCOUNT_NAMES)
+                net_profit = _dart_get_amount(items, NET_PROFIT_ACCOUNT_NAMES)
 
-        # 영업이익
-        op = data.get('operatingProfit')
-        if op is not None:
-            try:
-                result['operating_profit'] = float(op) / 100
-            except (ValueError, TypeError):
-                pass
+                if any(v is not None for v in [revenue, op_profit, net_profit]):
+                    if revenue is not None:
+                        result['revenue'] = revenue
+                    if op_profit is not None:
+                        result['operating_profit'] = op_profit
+                    if net_profit is not None:
+                        result['net_profit'] = net_profit
+                    break
+            except Exception as e:
+                logger.debug(f"DART 재무제표 조회 실패 ({corp_code}, {year}, {fs_div}): {e}")
 
-        # 순이익
-        net = data.get('netIncome')
-        if net is not None:
-            try:
-                result['net_profit'] = float(net) / 100
-            except (ValueError, TypeError):
-                pass
+    # 재무지표(ROE): 수익성 지표 그룹(M210000)
+    for year in [current_year - 1, current_year - 2]:
+        try:
+            resp = requests.get(
+                "https://opendart.fss.or.kr/api/fnlttCmpnyIndx.json",
+                params={
+                    'crtfc_key': api_key,
+                    'corp_code': corp_code,
+                    'bsns_year': str(year),
+                    'reprt_code': '11011',
+                    'idx_cl_code': 'M210000',  # 수익성 지표
+                },
+                timeout=10,
+            )
+            data = resp.json()
+            if data.get('status') == '000' and data.get('list'):
+                for item in data['list']:
+                    if item.get('idx_nm') == 'ROE':
+                        val = item.get('idx_val', '').replace(',', '').strip()
+                        if val and val not in ('-', ''):
+                            result['roe'] = float(val)
+                            break
+            if 'roe' in result:
+                break
+        except Exception as e:
+            logger.debug(f"DART ROE 조회 실패 ({corp_code}, {year}): {e}")
 
-        return result
-
-    except Exception as e:
-        logger.debug(f"[{stock_code}] Naver API 실패: {e}")
-        return {}
+    return result
 
 
 def upsert_financial_data(engine, records: List[dict]) -> int:
@@ -176,8 +244,9 @@ def safe_float(val) -> Optional[float]:
         return None
 
 
-def _run_naver_only(engine, today, target_codes: Optional[List[str]] = None) -> bool:
-    """FDR 실패 시 DB 종목 목록 기반으로 Naver Finance만으로 수집"""
+def _run_dart_only(engine, today, api_key: str, corp_code_map: dict,
+                   target_codes: Optional[List[str]] = None) -> bool:
+    """FDR 실패 시 DB 종목 목록 기반으로 DART만으로 수집"""
     from sqlalchemy import text as sa_text
 
     try:
@@ -199,27 +268,28 @@ def _run_naver_only(engine, today, target_codes: Optional[List[str]] = None) -> 
         logger.warning("stocks 테이블에 종목이 없어 재무 데이터 수집 불가")
         return True
 
-    logger.info(f"Naver Finance 단독 수집 대상: {len(rows)}개 종목")
+    logger.info(f"DART 단독 수집 대상: {len(rows)}개 종목")
     records = []
     for stock_code, stock_name in rows:
-        naver_data = fetch_naver_financial(stock_code)
+        corp_code = corp_code_map.get(stock_code)
+        dart_data = fetch_dart_financials(api_key, corp_code) if corp_code else {}
         record = {
             'stock_code': stock_code,
             'stock_name': stock_name,
             'date': today,
-            'per': naver_data.get('per'),
-            'pbr': naver_data.get('pbr'),
-            'eps': naver_data.get('eps'),
+            'per': None,
+            'pbr': None,
+            'eps': None,
             'bps': None,
             'div_yield': None,
-            'roe': naver_data.get('roe'),
-            'revenue': naver_data.get('revenue'),
-            'operating_profit': naver_data.get('operating_profit'),
-            'net_profit': naver_data.get('net_profit'),
-            'source': 'naver',
+            'roe': dart_data.get('roe'),
+            'revenue': dart_data.get('revenue'),
+            'operating_profit': dart_data.get('operating_profit'),
+            'net_profit': dart_data.get('net_profit'),
+            'source': 'dart',
         }
         records.append(record)
-        time.sleep(0.2)
+        time.sleep(0.3)  # DART API rate limiting
 
         if len(records) >= 100:
             saved = upsert_financial_data(engine, records)
@@ -230,7 +300,7 @@ def _run_naver_only(engine, today, target_codes: Optional[List[str]] = None) -> 
         saved = upsert_financial_data(engine, records)
         logger.info(f"  마지막 배치 저장: {saved}건")
 
-    logger.info("Naver Finance 단독 수집 완료")
+    logger.info("DART 단독 수집 완료")
     return True
 
 
@@ -242,6 +312,10 @@ def run(target_codes: Optional[List[str]] = None):
     load_dotenv()
     db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/stocksense")
     db_url = db_url.replace("+asyncpg", "")
+    dart_api_key = os.getenv("DART_API_KEY", "")
+
+    if not dart_api_key:
+        logger.warning("DART_API_KEY 미설정. ROE/매출/영업이익/순이익 수집 불가. .env에 DART_API_KEY를 추가하세요.")
 
     try:
         engine = create_engine(db_url, pool_pre_ping=True)
@@ -255,12 +329,20 @@ def run(target_codes: Optional[List[str]] = None):
 
     today = date.today()
 
+    # DART corp_code 매핑 (API키가 있을 때만)
+    corp_code_map = {}
+    if dart_api_key:
+        try:
+            corp_code_map = fetch_dart_corp_code_map(dart_api_key)
+        except Exception as e:
+            logger.warning(f"DART corp_code 매핑 실패: {e}. ROE/매출 등은 수집되지 않습니다.")
+
     # KRX 전체 데이터 수집
     krx_df = fetch_krx_financial_data()
 
     if krx_df is None:
-        logger.warning("FDR 데이터 수집 실패. DB 종목 기반 Naver Finance 단독 수집으로 폴백...")
-        return _run_naver_only(engine, today, target_codes)
+        logger.warning("FDR 데이터 수집 실패. DB 종목 기반 DART 단독 수집으로 폴백...")
+        return _run_dart_only(engine, today, dart_api_key, corp_code_map, target_codes)
 
     # 컬럼명 정규화 (FDR 버전별로 컬럼명이 다를 수 있음)
     col_map = {}
@@ -280,7 +362,7 @@ def run(target_codes: Optional[List[str]] = None):
             col_map['eps'] = col
         elif col_lower == 'bps':
             col_map['bps'] = col
-        elif col_lower in ('div', 'dividendyield', 'div_yield'):
+        elif col_lower in ('div', 'dividendyield', 'div_yield', 'dividend'):
             col_map['div_yield'] = col
 
     # Code 컬럼 fallback
@@ -306,8 +388,8 @@ def run(target_codes: Optional[List[str]] = None):
         logger.info(f"전체 KRX {len(krx_df)}개 종목 처리")
 
     records = []
-    naver_count = 0
-    naver_fail_count = 0
+    dart_success = 0
+    dart_fail = 0
 
     for idx, row in krx_df.iterrows():
         stock_code = str(row.get(col_map.get('code', ''), '')).strip()
@@ -329,26 +411,29 @@ def run(target_codes: Optional[List[str]] = None):
             'revenue': None,
             'operating_profit': None,
             'net_profit': None,
-            'source': 'fdr+naver',
+            'source': 'fdr+dart',
         }
 
-        # Naver API로 ROE/매출/영업이익 보완
-        naver_data = fetch_naver_financial(stock_code)
-        if naver_data:
-            record.update(naver_data)
-            naver_count += 1
+        # DART API로 ROE/매출/영업이익/순이익 보완
+        if dart_api_key and corp_code_map:
+            corp_code = corp_code_map.get(stock_code)
+            if corp_code:
+                dart_data = fetch_dart_financials(dart_api_key, corp_code)
+                if dart_data:
+                    record.update(dart_data)
+                    dart_success += 1
+                else:
+                    dart_fail += 1
+            time.sleep(0.3)  # DART API rate limiting
         else:
-            naver_fail_count += 1
+            time.sleep(0.05)
 
         records.append(record)
-
-        # Rate limiting
-        time.sleep(0.2)
 
         # 배치 저장 (100개마다)
         if len(records) >= 100:
             saved = upsert_financial_data(engine, records)
-            logger.info(f"  저장 완료: {saved}건 (누적 종목: {idx + 1})")
+            logger.info(f"  저장 완료: {saved}건 (누적 종목: {idx + 1}, DART 성공: {dart_success})")
             records = []
 
     # 나머지 저장
@@ -356,12 +441,12 @@ def run(target_codes: Optional[List[str]] = None):
         saved = upsert_financial_data(engine, records)
         logger.info(f"  마지막 배치 저장: {saved}건")
 
-    logger.info(f"재무 데이터 수집 완료. Naver 성공: {naver_count}, 실패: {naver_fail_count}")
+    logger.info(f"재무 데이터 수집 완료. DART 성공: {dart_success}, 실패: {dart_fail}")
     return True
 
 
 def main():
-    parser = argparse.ArgumentParser(description="재무 데이터 수집 (FDR + Naver Finance)")
+    parser = argparse.ArgumentParser(description="재무 데이터 수집 (FDR + DART OpenAPI)")
     parser.add_argument(
         '--codes', nargs='+', type=str,
         help='특정 종목만 처리 (예: --codes 005930 000660)'
