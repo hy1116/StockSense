@@ -398,28 +398,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 7px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.35);
+  background: transparent;
+  font-variant-numeric: tabular-nums;
 }
 
 .stock-list-item:nth-child(2) .rank-badge {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  color: #1a1a1a;
+  color: #818cf8;
+  background: rgba(129, 140, 248, 0.12);
 }
 
 .stock-list-item:nth-child(3) .rank-badge {
-  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
-  color: #1a1a1a;
+  color: rgba(129, 140, 248, 0.7);
+  background: rgba(129, 140, 248, 0.07);
 }
 
 .stock-list-item:nth-child(4) .rank-badge {
-  background: linear-gradient(135deg, #cd7f32 0%, #b8860b 100%);
-  color: #1a1a1a;
+  color: rgba(129, 140, 248, 0.5);
+  background: rgba(129, 140, 248, 0.05);
 }
 
 .col-name {
@@ -750,8 +751,23 @@
   }
 
   .rank-badge {
-    background: #e5e7eb;
-    color: #111827;
+    color: rgba(17, 24, 39, 0.25);
+    background: transparent;
+  }
+
+  .stock-list-item:nth-child(2) .rank-badge {
+    color: #4f46e5;
+    background: rgba(79, 70, 229, 0.08);
+  }
+
+  .stock-list-item:nth-child(3) .rank-badge {
+    color: rgba(79, 70, 229, 0.65);
+    background: rgba(79, 70, 229, 0.05);
+  }
+
+  .stock-list-item:nth-child(4) .rank-badge {
+    color: rgba(79, 70, 229, 0.45);
+    background: rgba(79, 70, 229, 0.04);
   }
 
   .tab-buttons {
