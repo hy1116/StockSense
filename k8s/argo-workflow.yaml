@@ -47,6 +47,9 @@ spec:
       - - name: data-ingestion
           template: run-task
           arguments: { parameters: [{name: cmd, value: "python -m ml.collect_daily_data"}] }
+      - - name: financial-data
+          template: run-task
+          arguments: { parameters: [{name: cmd, value: "python -m ml.collect_financial_data"}] }
       - - name: preprocessing
           template: run-task
           arguments: { parameters: [{name: cmd, value: "python -m ml.preprocess_data"}] }

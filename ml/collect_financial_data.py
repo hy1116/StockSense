@@ -35,16 +35,29 @@ def fetch_krx_financial_data() -> Optional[object]:
     """FinanceDataReader로 KRX 전체 종목 재무 데이터 수집"""
     try:
         import FinanceDataReader as fdr
-        logger.info("KRX 전체 종목 데이터 수집 중 (FinanceDataReader)...")
-        df = fdr.StockListing('KRX')
-        logger.info(f"KRX 종목 수: {len(df)}")
-        return df
+        import pandas as pd
     except ImportError:
         logger.error("FinanceDataReader가 설치되지 않았습니다. pip install finance-datareader")
         return None
-    except Exception as e:
-        logger.error(f"KRX 데이터 수집 실패: {e}")
-        return None
+
+    # KRX 전체 → 실패 시 KOSPI + KOSDAQ 합산으로 폴백
+    for market in ['KRX', None]:
+        try:
+            if market == 'KRX':
+                logger.info("KRX 전체 종목 데이터 수집 중 (FinanceDataReader)...")
+                df = fdr.StockListing('KRX')
+            else:
+                logger.info("KRX 실패, KOSPI + KOSDAQ 개별 수집으로 폴백...")
+                kospi = fdr.StockListing('KOSPI')
+                kosdaq = fdr.StockListing('KOSDAQ')
+                df = pd.concat([kospi, kosdaq], ignore_index=True)
+
+            logger.info(f"종목 수: {len(df)}")
+            return df
+        except Exception as e:
+            logger.warning(f"{'KRX' if market else 'KOSPI+KOSDAQ'} 데이터 수집 실패: {e}")
+
+    return None
 
 
 def fetch_naver_financial(stock_code: str) -> dict:
@@ -63,6 +76,15 @@ def fetch_naver_financial(stock_code: str) -> dict:
         data = resp.json()
         result = {}
 
+        # PER, PBR, EPS (FDR 폴백용)
+        for key, field in [('per', 'per'), ('pbr', 'pbr'), ('eps', 'eps')]:
+            val = data.get(field)
+            if val is not None:
+                try:
+                    result[key] = float(val)
+                except (ValueError, TypeError):
+                    pass
+
         # ROE
         roe_val = data.get('roe')
         if roe_val is not None:
@@ -80,10 +102,10 @@ def fetch_naver_financial(stock_code: str) -> dict:
                 pass
 
         # 영업이익
-        営業利益 = data.get('operatingProfit')
-        if 営業利益 is not None:
+        op = data.get('operatingProfit')
+        if op is not None:
             try:
-                result['operating_profit'] = float(営業利益) / 100
+                result['operating_profit'] = float(op) / 100
             except (ValueError, TypeError):
                 pass
 
@@ -157,6 +179,64 @@ def safe_float(val) -> Optional[float]:
         return None
 
 
+def _run_naver_only(engine, today, target_codes: Optional[List[str]] = None) -> bool:
+    """FDR 실패 시 DB 종목 목록 기반으로 Naver Finance만으로 수집"""
+    from sqlalchemy import text as sa_text
+
+    try:
+        with engine.connect() as conn:
+            if target_codes:
+                placeholders = ','.join(f"'{c}'" for c in target_codes)
+                rows = conn.execute(sa_text(
+                    f"SELECT stock_code, stock_name FROM stocks WHERE stock_code IN ({placeholders})"
+                )).fetchall()
+            else:
+                rows = conn.execute(sa_text(
+                    "SELECT stock_code, stock_name FROM stocks"
+                )).fetchall()
+    except Exception as e:
+        logger.error(f"stocks 조회 실패: {e}")
+        return True
+
+    if not rows:
+        logger.warning("stocks 테이블에 종목이 없어 재무 데이터 수집 불가")
+        return True
+
+    logger.info(f"Naver Finance 단독 수집 대상: {len(rows)}개 종목")
+    records = []
+    for stock_code, stock_name in rows:
+        naver_data = fetch_naver_financial(stock_code)
+        record = {
+            'stock_code': stock_code,
+            'stock_name': stock_name,
+            'date': today,
+            'per': naver_data.get('per'),
+            'pbr': naver_data.get('pbr'),
+            'eps': naver_data.get('eps'),
+            'bps': None,
+            'div_yield': None,
+            'roe': naver_data.get('roe'),
+            'revenue': naver_data.get('revenue'),
+            'operating_profit': naver_data.get('operating_profit'),
+            'net_profit': naver_data.get('net_profit'),
+            'source': 'naver',
+        }
+        records.append(record)
+        time.sleep(0.2)
+
+        if len(records) >= 100:
+            saved = upsert_financial_data(engine, records)
+            logger.info(f"  저장: {saved}건")
+            records = []
+
+    if records:
+        saved = upsert_financial_data(engine, records)
+        logger.info(f"  마지막 배치 저장: {saved}건")
+
+    logger.info("Naver Finance 단독 수집 완료")
+    return True
+
+
 def run(target_codes: Optional[List[str]] = None):
     """전체 재무 데이터 수집 실행"""
     from dotenv import load_dotenv
@@ -182,8 +262,8 @@ def run(target_codes: Optional[List[str]] = None):
     krx_df = fetch_krx_financial_data()
 
     if krx_df is None:
-        logger.warning("KRX 데이터 수집 실패. 재무 피처 없이 진행됩니다.")
-        return True  # 파이프라인 중단 방지
+        logger.warning("FDR 데이터 수집 실패. DB 종목 기반 Naver Finance 단독 수집으로 폴백...")
+        return _run_naver_only(engine, today, target_codes)
 
     # 컬럼명 정규화 (FDR 버전별로 컬럼명이 다를 수 있음)
     col_map = {}
