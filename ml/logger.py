@@ -16,7 +16,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-LOG_ROOT = Path(__file__).parent.parent / "logs" / "ml"
+LOG_ROOT = Path.home() / "Library" / "Logs" / "StockSense" / "ml"
 
 
 def get_logger(name: str, level=logging.INFO) -> logging.Logger:
