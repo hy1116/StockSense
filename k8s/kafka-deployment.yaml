@@ -115,28 +115,26 @@ spec:
           value: "24"
         - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
           value: "0"
+        # PVC 마운트 경로와 일치시켜 데이터 영속성 확보
+        - name: KAFKA_LOG_DIRS
+          value: "/var/lib/kafka/data"
 
         volumeMounts:
         - name: kafka-storage
           mountPath: /var/lib/kafka/data  # apache/kafka 데이터 경로
 
-        # 준비 확인: 토픽 목록 조회 가능할 때 Ready
+        # 준비 확인: 9092 포트가 열리면 Ready
+        # (kafka-topics.sh는 Java AdminClient 타임아웃이 길어 probe에 부적합)
         readinessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"
+          tcpSocket:
+            port: 9092
           initialDelaySeconds: 30
-          periodSeconds: 15
+          periodSeconds: 10
           failureThreshold: 5
 
         livenessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"
+          tcpSocket:
+            port: 9092
           initialDelaySeconds: 60
           periodSeconds: 20
           failureThreshold: 3
