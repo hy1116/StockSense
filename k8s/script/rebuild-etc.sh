@@ -57,7 +57,8 @@ success "Frontend image built"
 
 echo "   Building ML image..."
 docker build -t stocksense-ml:latest -f ml/Dockerfile . || {
-    warn "ML image build failed, skipping..."
+    error "ML image build failed"
+    exit 1
 }
 success "ML image built"
 
