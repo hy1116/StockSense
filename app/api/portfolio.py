@@ -401,7 +401,14 @@ async def get_stock_chart(
         if period == "1D":
             # KIS API 10분봉 (당일)
             from datetime import date
-            today = date.today().strftime("%Y%m%d")
+            from zoneinfo import ZoneInfo
+            kst = ZoneInfo("Asia/Seoul")
+            now_kst = datetime.now(kst)
+            today = now_kst.strftime("%Y%m%d")
+            # 현재 시간(KST) 기준, 장 마감(15:30) 이후면 15:30으로 제한
+            current_hhmm = now_kst.strftime("%H%M")
+            max_hhmm = min(current_hhmm, "1530")
+
             raw = await run_sync(client.get_minute_chart, stock_code, interval=10)
             candles = []
             if raw.get("rt_cd") == "0":
@@ -411,6 +418,9 @@ async def get_stock_chart(
                     if not t or len(t) < 4:
                         continue
                     hhmm = t[:4]
+                    # 장 시간(09:00~현재시간, 최대 15:30) 외 캔들 제거
+                    if hhmm < "0900" or hhmm > max_hhmm:
+                        continue
                     if hhmm in seen:
                         continue
                     seen.add(hhmm)
