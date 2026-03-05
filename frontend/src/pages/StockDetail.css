@@ -1683,6 +1683,11 @@
 
 /* ===== Light Mode ===== */
 @media (prefers-color-scheme: light) {
+  .hint-neutral {
+    color: rgba(17, 24, 39, 0.45);
+    background: rgba(17, 24, 39, 0.06);
+  }
+
   .sd-stock-name { color: #111827; }
   .sd-stock-code { color: rgba(17, 24, 39, 0.4); }
   .sd-market-badge {
