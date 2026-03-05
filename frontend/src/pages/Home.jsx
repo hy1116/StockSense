@@ -80,7 +80,6 @@ function Home() {
   }
 
   const formatMarketCap = (num) => {
-    console.log(`num:${num}`)
     if (!num) return '-'
     
     if (num >= 10000) {
