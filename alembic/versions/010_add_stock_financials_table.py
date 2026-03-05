@@ -19,6 +19,13 @@ depends_on = None
 
 
 def upgrade():
+    conn = op.get_bind()
+    exists = conn.execute(sa.text(
+        "SELECT 1 FROM information_schema.tables WHERE table_name='stock_financials'"
+    )).fetchone()
+    if exists:
+        return
+
     op.create_table(
         'stock_financials',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
