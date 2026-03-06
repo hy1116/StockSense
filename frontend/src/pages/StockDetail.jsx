@@ -946,6 +946,44 @@ function StockDetail() {
                               </div>
                             </div>
 
+                            {/* 거래량 지표 */}
+                            {(ti.volume_ratio != null || ti.mfi != null) && (
+                              <div className="sd-detail-group">
+                                <span className="sd-detail-group-label">거래량 지표 <Tip text="거래량 비율(Volume Ratio)은 당일 거래량을 20일 평균 거래량으로 나눈 값입니다. MFI(Money Flow Index)는 거래량을 반영한 RSI로 0~100 사이 값이며, 80 이상이면 과매수, 20 이하면 과매도 신호입니다." /></span>
+                                <div className="sd-detail-ind-list">
+                                  {ti.volume_ratio != null && (
+                                    <div className="sd-detail-ind-row">
+                                      <span className="sd-detail-ind-name">거래량 비율</span>
+                                      <span className="sd-detail-ind-val">{ti.volume_ratio.toFixed(2)}x</span>
+                                      <span className={`sd-detail-ind-signal ${ti.volume_ratio > 1.5 ? 'signal-down' : ti.volume_ratio > 1.0 ? 'signal-up' : 'signal-neutral'}`}>
+                                        {ti.volume_ratio > 1.5 ? '급증 (불확실성↑)' : ti.volume_ratio > 1.0 ? '평균 초과' : '평균 이하'}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {ti.mfi != null && (
+                                    <div className="sd-detail-ind-row">
+                                      <span className="sd-detail-ind-name">MFI (14일)</span>
+                                      <span className="sd-detail-ind-val">{ti.mfi.toFixed(1)}</span>
+                                      <span className={`sd-detail-ind-signal ${ti.mfi > 80 ? 'signal-down' : ti.mfi < 20 ? 'signal-up' : 'signal-neutral'}`}>
+                                        {ti.mfi > 80 ? '과매수' : ti.mfi < 20 ? '과매도' : '중립'}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {ti.obv_normalized != null && (
+                                    <div className="sd-detail-ind-row">
+                                      <span className="sd-detail-ind-name">OBV (정규화)</span>
+                                      <span className={`sd-detail-ind-val ${ti.obv_normalized > 0 ? 'price-up' : 'price-down'}`}>
+                                        {ti.obv_normalized > 0 ? '+' : ''}{ti.obv_normalized.toFixed(2)}
+                                      </span>
+                                      <span className={`sd-detail-ind-signal ${ti.obv_normalized > 0 ? 'signal-up' : 'signal-down'}`}>
+                                        {ti.obv_normalized > 0 ? '매수 압력' : '매도 압력'}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
                           </div>
                         </div>
                       )

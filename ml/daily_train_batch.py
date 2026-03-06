@@ -132,8 +132,15 @@ class DailyModelTrainer:
             missing = set(self.feature_columns) - set(available_features)
             logger.warning(f"누락된 피처: {missing}")
 
-        X = df[available_features]
+        X = df[available_features].copy()
         y = df['target_price']
+
+        # inf/NaN 클리닝 (분모 0 등으로 발생한 이상값 처리)
+        inf_count = np.isinf(X.values).sum()
+        nan_count = X.isnull().values.sum()
+        if inf_count > 0 or nan_count > 0:
+            logger.warning(f"inf={inf_count}, NaN={nan_count} 값 발견 → 0으로 대체")
+            X = X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
         logger.info(f"피처 준비 완료: {len(available_features)}개 피처")
 
@@ -397,16 +404,16 @@ class DailyModelTrainer:
                 train_samples=results['train_samples'],
                 test_samples=results['test_samples'],
                 total_samples=results['total_samples'],
-                train_score=results['train_score'],
-                test_score=results['test_score'],
-                mae=results['mae'],
-                rmse=results['rmse'],
-                mape=results['mape'],
+                train_score=float(results['train_score']),
+                test_score=float(results['test_score']),
+                mae=float(results['mae']) if results['mae'] is not None else None,
+                rmse=float(results['rmse']) if results['rmse'] is not None else None,
+                mape=float(results['mape']) if results['mape'] is not None else None,
                 model_binary=model_binary,
                 scaler_binary=scaler_binary,
                 is_active=activate,
                 trained_by="batch",
-                training_duration_sec=results['training_duration'],
+                training_duration_sec=float(results['training_duration']),
                 notes=f"XGBoost batch training at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
@@ -445,16 +452,16 @@ class DailyModelTrainer:
                 train_samples=results['train_samples'],
                 test_samples=results['test_samples'],
                 total_samples=results['total_samples'],
-                train_score=results['train_score'],
-                test_score=results['test_score'],
-                mae=results['mae'],
-                rmse=results['rmse'],
-                mape=results['mape'],
+                train_score=float(results['train_score']),
+                test_score=float(results['test_score']),
+                mae=float(results['mae']) if results['mae'] is not None else None,
+                rmse=float(results['rmse']) if results['rmse'] is not None else None,
+                mape=float(results['mape']) if results['mape'] is not None else None,
                 model_binary=model_binary,
                 scaler_binary=scaler_binary,
                 is_active=activate,
                 trained_by="batch",
-                training_duration_sec=results['training_duration'],
+                training_duration_sec=float(results['training_duration']),
                 notes=f"LSTM batch training at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
@@ -512,10 +519,15 @@ class DailyModelTrainer:
 
         logger.info("최신 모델 파일 업데이트 완료")
 
-    def should_activate(self, results: Dict, current_model: Optional[ModelTrainingHistory]) -> bool:
+    def should_activate(self, results: Dict, current_model: Optional[ModelTrainingHistory], min_score: float = 0.5) -> bool:
         """새 모델을 활성화할지 결정"""
+        # 최소 성능 기준 미달이면 무조건 비활성화
+        if results['test_score'] < min_score:
+            logger.warning(f"성능 기준 미달 (test_score={results['test_score']:.4f} < {min_score}) - 비활성화")
+            return False
+
         if current_model is None:
-            logger.info("기존 활성 모델 없음 - 새 모델 활성화")
+            logger.info(f"기존 활성 모델 없음 - 새 모델 활성화 (test_score={results['test_score']:.4f})")
             return True
 
         # Test R² 비교 (새 모델이 더 좋으면 활성화)

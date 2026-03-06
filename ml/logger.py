@@ -11,12 +11,15 @@ Usage:
     with TeeStdout("preprocess_data"):
         main_logic()
 """
+import os
 import sys
 import logging
 from datetime import datetime
 from pathlib import Path
 
-LOG_ROOT = Path.home() / "Library" / "Logs" / "StockSense" / "ml"
+# 환경변수 ML_LOG_DIR이 있으면 사용, 없으면 로컬 Mac 경로
+_log_root_env = os.environ.get("ML_LOG_DIR")
+LOG_ROOT = Path(_log_root_env) if _log_root_env else Path.home() / "Library" / "Logs" / "StockSense" / "ml"
 
 
 def get_logger(name: str, level=logging.INFO) -> logging.Logger:

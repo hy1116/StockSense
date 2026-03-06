@@ -237,7 +237,7 @@ class DataPreprocessor:
             # EPS 정규화 (eps / close, 무차원 비율)
             if 'eps' in merged.columns and 'close' in merged.columns:
                 merged['eps_normalized'] = merged.apply(
-                    lambda r: r['eps'] / r['close'] if r['close'] > 0 and r['eps'] == r['eps'] else 0.0,
+                    lambda r: r['eps'] / r['close'] if r['close'] > 0 and pd.notna(r['eps']) and r['eps'] is not None else 0.0,
                     axis=1
                 )
             else:

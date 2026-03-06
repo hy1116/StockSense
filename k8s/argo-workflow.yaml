@@ -55,7 +55,7 @@ spec:
           arguments: { parameters: [{name: cmd, value: "python -m ml.preprocess_data"}] }
       - - name: training
           template: run-task
-          arguments: { parameters: [{name: cmd, value: "python -m ml.train_model"}] }
+          arguments: { parameters: [{name: cmd, value: "python -m ml.daily_train_batch"}] }
 
     - name: run-task
       inputs:
@@ -68,6 +68,8 @@ spec:
         env:
         - name: TZ
           value: "Asia/Seoul"
+        - name: ML_LOG_DIR
+          value: "/app/data/logs"
         - name: DATABASE_URL
           valueFrom:
             configMapKeyRef:
@@ -146,8 +148,17 @@ spec:
         env:
         - name: TZ
           value: "Asia/Seoul"
+        - name: ML_LOG_DIR
+          value: "/app/data/logs"
         - name: DATABASE_URL
           valueFrom:
             configMapKeyRef:
               name: stocksense-config
               key: DATABASE_URL
+        volumeMounts:
+        - name: ml-data
+          mountPath: /app/data
+    volumes:
+    - name: ml-data
+      persistentVolumeClaim:
+        claimName: ml-data-pvc

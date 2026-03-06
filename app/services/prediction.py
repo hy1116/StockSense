@@ -376,6 +376,9 @@ class PredictionService:
                     "macd_signal": round(float(signal), 2),
                     "macd_diff": round(float(macd - signal), 2),
                     "price_change_1d": price_change_1d,
+                    "volume_ratio": round(float(volume_ratio), 3),
+                    "obv_normalized": round(float(obv_normalized), 3),
+                    "mfi": round(float(mfi), 2),
                 },
                 "news_sentiment": {
                     "score": round(float(news_features.get("news_sentiment_avg", 0)), 2),

@@ -167,6 +167,8 @@ async def crawl_news(
         saved_count = 0
         duplicate_count = 0
 
+        summarizer = NewsSummarizer()
+
         # DB에 저장
         for news_item in news_list:
             try:
@@ -178,6 +180,11 @@ async def crawl_news(
                     duplicate_count += 1
                     continue
 
+                summary = summarizer.summarize(
+                    title=news_item['title'],
+                    content=news_item.get('content')
+                )
+
                 # 새 뉴스 저장
                 news = StockNews(
                     stock_code=news_item['stock_code'],
@@ -186,6 +193,7 @@ async def crawl_news(
                     url=news_item['url'],
                     source=news_item.get('source'),
                     content=news_item.get('content'),
+                    summary=summary,
                     image_url=news_item.get('image_url'),
                     published_at=news_item.get('published_at'),
                 )
@@ -235,6 +243,8 @@ async def search_and_crawl_news(
         saved_count = 0
         duplicate_count = 0
 
+        summarizer = NewsSummarizer()
+
         # DB에 저장
         for news_item in news_list:
             try:
@@ -246,6 +256,11 @@ async def search_and_crawl_news(
                     duplicate_count += 1
                     continue
 
+                summary = summarizer.summarize(
+                    title=news_item['title'],
+                    content=news_item.get('content')
+                )
+
                 # 새 뉴스 저장
                 news = StockNews(
                     stock_code=news_item['stock_code'],
@@ -254,6 +269,7 @@ async def search_and_crawl_news(
                     url=news_item['url'],
                     source=news_item.get('source'),
                     content=news_item.get('content'),
+                    summary=summary,
                     image_url=news_item.get('image_url'),
                     published_at=news_item.get('published_at'),
                 )
