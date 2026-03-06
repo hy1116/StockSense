@@ -185,16 +185,6 @@ kubectl apply -f k8s/argo-workflow.yaml
 success "ML pipeline configured"
 
 # ============================================
-# 9. EFK Stack 배포 (로깅)
-# ============================================
-echo ""
-echo "▶ [9/9] Deploying EFK Stack (Logging)..."
-kubectl apply -f k8s/elasticsearch.yaml
-kubectl apply -f k8s/fluentd.yaml
-kubectl apply -f k8s/kibana.yaml
-success "EFK Stack deployed"
-
-# ============================================
 # 배포 완료 - 상태 확인
 # ============================================
 echo ""
