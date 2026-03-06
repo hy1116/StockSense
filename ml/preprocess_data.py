@@ -84,6 +84,22 @@ class DataPreprocessor:
         # 거래량 변화율
         df["volume_change"] = df["volume"].pct_change(1)
 
+        # 거래량 비율 (당일 / 20일 평균)
+        df["volume_ratio"] = df["volume"] / df["volume_ma20"]
+
+        # OBV (On Balance Volume) 정규화
+        obv = (np.sign(df["close"].diff()) * df["volume"]).fillna(0).cumsum()
+        df["obv_normalized"] = obv / df["volume_ma20"]
+
+        # MFI (Money Flow Index, 14일)
+        typical_price = (df["high"] + df["low"] + df["close"]) / 3
+        raw_money_flow = typical_price * df["volume"]
+        tp_diff = typical_price.diff()
+        positive_flow = raw_money_flow.where(tp_diff > 0, 0).rolling(window=14).sum()
+        negative_flow = raw_money_flow.where(tp_diff <= 0, 0).rolling(window=14).sum()
+        money_ratio = positive_flow / negative_flow.replace(0, np.nan)
+        df["mfi"] = 100 - (100 / (1 + money_ratio))
+
         # 변동성 (표준편차)
         df["volatility_5d"] = df["close"].rolling(window=5).std()
         df["volatility_20d"] = df["close"].rolling(window=20).std()

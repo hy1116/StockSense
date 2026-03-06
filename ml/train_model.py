@@ -241,6 +241,7 @@ class StockPredictionTrainer:
                           'bb_upper', 'bb_middle', 'bb_lower',
                           'macd', 'macd_signal', 'macd_diff',
                           'price_change_1d', 'volume_change',
+                          'volume_ratio', 'obv_normalized', 'mfi',
                           'news_sentiment_avg', 'news_count',
                           'news_positive_ratio', 'news_negative_ratio']
 

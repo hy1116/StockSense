@@ -1284,6 +1284,16 @@
   overflow: hidden;
 }
 
+.sd-news-summary {
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.4;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .sd-news-meta {
   display: flex;
   align-items: center;
@@ -1899,6 +1909,7 @@
 
   .sd-news-item:hover { background: #f9fafb; }
   .sd-news-title { color: #111827; }
+  .sd-news-summary { color: rgba(17, 24, 39, 0.5); }
   .sd-news-source { color: #4f46e5; }
   .sd-news-time { color: rgba(17, 24, 39, 0.35); }
   .sd-news-thumb { background: #f3f4f6; }

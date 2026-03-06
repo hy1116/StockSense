@@ -1263,6 +1263,9 @@ function StockDetail() {
               >
                 <div className="sd-news-body">
                   <span className="sd-news-title">{item.title}</span>
+                  {item.summary && item.summary !== item.title && (
+                    <p className="sd-news-summary">{item.summary}</p>
+                  )}
                   <div className="sd-news-meta">
                     {item.source && <span className="sd-news-source">{item.source}</span>}
                     <span className="sd-news-time">{formatNewsTime(item.published_at)}</span>

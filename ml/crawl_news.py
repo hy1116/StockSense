@@ -62,11 +62,13 @@ async def crawl_news_for_stocks(
     from app.models.stock_news import StockNews
     from app.services.news_crawler import crawl_stock_news, search_stock_news
     from app.services.news_sentiment import NewsSentimentAnalyzer
+    from app.services.news_summarizer import NewsSummarizer
 
     load_dotenv()
 
-    # 감성 분석기 초기화
+    # 감성 분석기 & 요약기 초기화
     sentiment_analyzer = NewsSentimentAnalyzer(use_transformer=use_transformer)
+    summarizer = NewsSummarizer()
 
     # DB 연결
     db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/stocksense")
@@ -145,6 +147,12 @@ async def crawl_news_for_stocks(
                             analysis_text += " " + news_item['content']
                         sentiment_score, sentiment_label = sentiment_analyzer.analyze(analysis_text)
 
+                        # 한줄요약 생성
+                        summary = summarizer.summarize(
+                            title=news_item['title'],
+                            content=news_item.get('content')
+                        )
+
                         # 새 뉴스 저장
                         news = StockNews(
                             stock_code=news_item['stock_code'],
@@ -153,6 +161,7 @@ async def crawl_news_for_stocks(
                             url=news_item['url'],
                             source=news_item.get('source'),
                             content=news_item.get('content'),
+                            summary=summary,
                             image_url=news_item.get('image_url'),
                             published_at=news_item.get('published_at'),
                             sentiment_score=sentiment_score,

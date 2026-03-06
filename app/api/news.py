@@ -17,6 +17,7 @@ from app.schemas.news import (
     NewsSentimentStats
 )
 from app.services.news_crawler import crawl_stock_news, search_stock_news
+from app.services.news_summarizer import NewsSummarizer
 
 router = APIRouter(prefix="/api/news", tags=["news"])
 logger = logging.getLogger(__name__)
@@ -275,4 +276,42 @@ async def search_and_crawl_news(
 
     except Exception as e:
         logger.error(f"❌ Error search crawling news: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/summarize-batch")
+async def summarize_existing_news(
+    limit: int = Query(100, ge=1, le=1000, description="처리할 최대 뉴스 수"),
+    db: AsyncSession = Depends(get_db)
+):
+    """요약이 없는 기존 뉴스에 한줄요약 일괄 생성"""
+    try:
+        summarizer = NewsSummarizer()
+
+        # summary가 NULL인 뉴스 조회
+        query = (
+            select(StockNews)
+            .where(StockNews.summary.is_(None))
+            .order_by(StockNews.published_at.desc())
+            .limit(limit)
+        )
+        result = await db.execute(query)
+        news_list = result.scalars().all()
+
+        updated = 0
+        for news in news_list:
+            summary = summarizer.summarize(
+                title=news.title,
+                content=news.content
+            )
+            news.summary = summary
+            updated += 1
+
+        await db.commit()
+
+        logger.info(f"Batch summarized {updated} news articles")
+        return {"updated": updated, "message": f"{updated}건의 뉴스에 한줄요약을 생성했습니다."}
+
+    except Exception as e:
+        logger.error(f"Error batch summarizing: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -42,9 +42,9 @@ def _get_sync_db():
 # LSTM 윈도우 크기 (daily_train_batch.py와 동일)
 LSTM_WINDOW_SIZE = 20
 
-# 앙상블 가중치
-XGB_WEIGHT = 0.6
-LSTM_WEIGHT = 0.4
+# 앙상블 기본 가중치 (test R² 정보 없을 때 사용)
+XGB_WEIGHT_DEFAULT = 0.6
+LSTM_WEIGHT_DEFAULT = 0.4
 
 
 class PredictionService:
@@ -208,13 +208,14 @@ class PredictionService:
                 os.remove(tmp_path)
 
     def _get_default_feature_columns(self) -> list:
-        """기본 피처 컬럼 반환 (26개: 기술적+뉴스+재무)"""
+        """기본 피처 컬럼 반환 (29개: 기술적+뉴스+재무)"""
         return [
             'open', 'high', 'low', 'close', 'volume',
             'ma5', 'ma10', 'ma20', 'rsi',
             'bb_upper', 'bb_middle', 'bb_lower',
             'macd', 'macd_signal', 'macd_diff',
             'price_change_1d', 'volume_change',
+            'volume_ratio', 'obv_normalized', 'mfi',
             'news_sentiment_avg', 'news_count',
             'news_positive_ratio', 'news_negative_ratio',
             'per', 'pbr', 'eps_normalized', 'div_yield', 'roe'
@@ -322,7 +323,7 @@ class PredictionService:
 
             recommendation, factor_scores = self._get_recommendation(
                 current_price, predicted_price, trend, rsi, macd, signal,
-                bb_upper, bb_lower, volumes
+                bb_upper, bb_lower, volumes, confidence=confidence
             )
 
             prediction_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -343,8 +344,23 @@ class PredictionService:
             if len(close_prices) >= 2 and close_prices[1] > 0:
                 price_change_1d = round(float((close_prices[0] - close_prices[1]) / close_prices[1] * 100), 2)
 
+            # 앙상블 가중치 정보 (응답에 포함)
+            ensemble_weights = None
+            if xgb_pred is not None and lstm_pred is not None:
+                xgb_r2 = max(0, self.xgb_info.get('test_score', 0))
+                lstm_r2 = max(0, self.lstm_info.get('test_score', 0))
+                total_r2 = xgb_r2 + lstm_r2
+                if total_r2 > 0:
+                    ensemble_weights = {
+                        "xgb_weight": round(xgb_r2 / total_r2, 3),
+                        "lstm_weight": round(lstm_r2 / total_r2, 3),
+                        "xgb_r2": round(xgb_r2, 4),
+                        "lstm_r2": round(lstm_r2, 4),
+                    }
+
             details = {
                 "model_used": model_used,
+                "ensemble_weights": ensemble_weights,
                 "xgb_predicted": round(xgb_pred, 2) if xgb_pred is not None else None,
                 "lstm_predicted": round(lstm_pred, 2) if lstm_pred is not None else None,
                 "technical_indicators": {
@@ -409,7 +425,8 @@ class PredictionService:
             xgb_pred = self._predict_with_xgb(
                 current_price, open_price, high_price, low_price, volume,
                 ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
-                close_prices, stock_code=stock_code
+                close_prices, volumes=volumes, high_prices=high_prices, low_prices=low_prices,
+                stock_code=stock_code
             )
             logger.info(f"[XGBoost] prediction: {xgb_pred:.2f}")
 
@@ -419,11 +436,23 @@ class PredictionService:
             if lstm_pred is not None:
                 logger.info(f"[LSTM] prediction: {lstm_pred:.2f}")
 
-        # 앙상블 결합
+        # 앙상블 결합 (모델별 test R² 비례 동적 가중치)
         if xgb_pred is not None and lstm_pred is not None:
-            predicted = XGB_WEIGHT * xgb_pred + LSTM_WEIGHT * lstm_pred
+            xgb_r2 = max(0, self.xgb_info.get('test_score', 0))
+            lstm_r2 = max(0, self.lstm_info.get('test_score', 0))
+            total_r2 = xgb_r2 + lstm_r2
+
+            if total_r2 > 0:
+                xgb_w = xgb_r2 / total_r2
+                lstm_w = lstm_r2 / total_r2
+            else:
+                xgb_w = XGB_WEIGHT_DEFAULT
+                lstm_w = LSTM_WEIGHT_DEFAULT
+
+            predicted = xgb_w * xgb_pred + lstm_w * lstm_pred
             model_used = "ensemble"
-            logger.info(f"[Ensemble] {XGB_WEIGHT}*XGB + {LSTM_WEIGHT}*LSTM = {predicted:.2f}")
+            logger.info(f"[Ensemble] {xgb_w:.2f}*XGB(R²={xgb_r2:.4f}) + "
+                        f"{lstm_w:.2f}*LSTM(R²={lstm_r2:.4f}) = {predicted:.2f}")
         elif xgb_pred is not None:
             predicted = xgb_pred
             model_used = "xgboost"
@@ -438,14 +467,65 @@ class PredictionService:
 
     def _predict_with_xgb(self, current_price, open_price, high_price, low_price, volume,
                           ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
-                          close_prices, stock_code=None) -> float:
+                          close_prices, volumes=None, high_prices=None, low_prices=None,
+                          stock_code=None) -> float:
         """XGBoost 모델을 사용한 예측"""
         try:
-            volume_change = 0.0
             price_change_1d = 0.0
+            volume_change = 0.0
 
             if len(close_prices) >= 2:
                 price_change_1d = (close_prices[0] - close_prices[1]) / close_prices[1]
+
+            if volumes is not None and len(volumes) >= 2 and volumes[1] > 0:
+                volume_change = (volumes[0] - volumes[1]) / volumes[1]
+
+            # volume_ratio: 당일 거래량 / 20일 평균 거래량
+            volume_ratio = 0.0
+            if volumes is not None and len(volumes) >= 20:
+                vol_ma20 = np.mean(volumes[:20])
+                if vol_ma20 > 0:
+                    volume_ratio = float(volumes[0] / vol_ma20)
+
+            # obv_normalized: OBV / 20일 평균 거래량
+            obv_normalized = 0.0
+            if volumes is not None and close_prices is not None and len(volumes) >= 20:
+                # 역순 (최신이 앞에) → 시간순으로 변환하여 계산
+                cp = close_prices[:20][::-1]
+                vl = volumes[:20][::-1]
+                obv = 0.0
+                for i in range(1, len(cp)):
+                    if cp[i] > cp[i - 1]:
+                        obv += vl[i]
+                    elif cp[i] < cp[i - 1]:
+                        obv -= vl[i]
+                vol_ma20 = np.mean(volumes[:20])
+                if vol_ma20 > 0:
+                    obv_normalized = obv / vol_ma20
+
+            # mfi: Money Flow Index (14일)
+            mfi = 50.0
+            if (volumes is not None and high_prices is not None and low_prices is not None
+                    and close_prices is not None and len(close_prices) >= 15):
+                # 역순 → 시간순
+                cp = close_prices[:15][::-1]
+                hp = high_prices[:15][::-1]
+                lp = low_prices[:15][::-1]
+                vl = volumes[:15][::-1]
+                tp = (hp + lp + cp) / 3
+                pos_flow = 0.0
+                neg_flow = 0.0
+                for i in range(1, len(tp)):
+                    mf = tp[i] * vl[i]
+                    if tp[i] > tp[i - 1]:
+                        pos_flow += mf
+                    else:
+                        neg_flow += mf
+                if neg_flow > 0:
+                    mr = pos_flow / neg_flow
+                    mfi = 100 - (100 / (1 + mr))
+                elif pos_flow > 0:
+                    mfi = 100.0
 
             news_features = self._get_news_sentiment_features(stock_code) if stock_code else {
                 'news_sentiment_avg': 0.0, 'news_count': 0,
@@ -475,6 +555,9 @@ class PredictionService:
                 'macd_diff': macd - signal,
                 'price_change_1d': price_change_1d,
                 'volume_change': volume_change,
+                'volume_ratio': volume_ratio,
+                'obv_normalized': obv_normalized,
+                'mfi': mfi,
                 **news_features,
                 'per': fin['per'],
                 'pbr': fin['pbr'],
@@ -586,6 +669,23 @@ class PredictionService:
             # 변화율
             df['price_change_1d'] = df['close'].pct_change()
             df['volume_change'] = df['volume'].pct_change()
+
+            # 거래량 비율
+            volume_ma20 = df['volume'].rolling(window=20).mean()
+            df['volume_ratio'] = df['volume'] / volume_ma20
+
+            # OBV 정규화
+            obv = (np.sign(df['close'].diff()) * df['volume']).fillna(0).cumsum()
+            df['obv_normalized'] = obv / volume_ma20
+
+            # MFI (14일)
+            typical_price = (df['high'] + df['low'] + df['close']) / 3
+            raw_money_flow = typical_price * df['volume']
+            tp_diff = typical_price.diff()
+            positive_flow = raw_money_flow.where(tp_diff > 0, 0).rolling(window=14).sum()
+            negative_flow = raw_money_flow.where(tp_diff <= 0, 0).rolling(window=14).sum()
+            money_ratio = positive_flow / negative_flow.replace(0, np.nan)
+            df['mfi'] = 100 - (100 / (1 + money_ratio))
 
             # 뉴스 감성 피처 (전체 기간 동일값 사용)
             news_features = self._get_news_sentiment_features(stock_code) if stock_code else {
@@ -803,22 +903,31 @@ class PredictionService:
     def _get_recommendation(self, current: float, predicted: float, trend: str,
                            rsi: float, macd: float, signal: float,
                            bb_upper: float = 0, bb_lower: float = 0,
-                           volumes: np.ndarray = None):
+                           volumes: np.ndarray = None, confidence: float = 0.5):
         """멀티팩터 가중 스코어링 기반 투자의견 → (recommendation, factor_scores)
 
         각 팩터를 -1.0 ~ +1.0 으로 정규화한 뒤 가중 합산.
-        가중치 배분 (합계 1.0):
-          - 예측 변동률  0.30  (ML 핵심 시그널)
-          - 추세(MA)     0.25  (중기 방향성)
-          - RSI          0.20  (과매수/과매도)
-          - MACD         0.15  (모멘텀)
-          - 볼린저밴드   0.10  (평균회귀)
+        신뢰도 연동: confidence가 높으면 ML 예측 비중 ↑, 낮으면 기술적 지표 비중 ↑
+          - confidence ≥ 0.6  → W_PRED 최대 0.45
+          - confidence ≤ 0.35 → W_PRED 최소 0.15
+          - 나머지 가중치는 기술적 지표에 원래 비율대로 재분배
         """
-        W_PRED = 0.30
-        W_TREND = 0.25
-        W_RSI = 0.20
-        W_MACD = 0.15
-        W_BB = 0.10
+        # 신뢰도 기반 ML 예측 가중치 (기본 0.30, 범위 0.15~0.45)
+        BASE_PRED = 0.30
+        if confidence >= 0.6:
+            W_PRED = min(0.45, BASE_PRED + (confidence - 0.6) * 0.75)
+        elif confidence <= 0.35:
+            W_PRED = max(0.15, BASE_PRED - (0.35 - confidence) * 1.5)
+        else:
+            W_PRED = BASE_PRED
+
+        # 나머지 가중치를 기술적 지표에 원래 비율(25:20:15:10)대로 재분배
+        tech_remaining = 1.0 - W_PRED
+        tech_ratio_sum = 0.70  # 원래 기술적 합계 (0.25+0.20+0.15+0.10)
+        W_TREND = tech_remaining * (0.25 / tech_ratio_sum)
+        W_RSI = tech_remaining * (0.20 / tech_ratio_sum)
+        W_MACD = tech_remaining * (0.15 / tech_ratio_sum)
+        W_BB = tech_remaining * (0.10 / tech_ratio_sum)
 
         # --- 1) 예측 변동률 시그널 ---
         change_pct = ((predicted - current) / current) * 100 if current else 0
