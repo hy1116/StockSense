@@ -35,6 +35,10 @@ spec:
     - name: ml-data
       persistentVolumeClaim:
         claimName: ml-data-pvc
+    - name: ml-logs
+      hostPath:
+        path: /Users/choihyun-young/Library/Logs/StockSense/ml
+        type: DirectoryOrCreate
     templates:
     - name: ml-steps
       steps:
@@ -69,7 +73,7 @@ spec:
         - name: TZ
           value: "Asia/Seoul"
         - name: ML_LOG_DIR
-          value: "/app/data/logs"
+          value: "/app/ml-logs"
         - name: DATABASE_URL
           valueFrom:
             configMapKeyRef:
@@ -112,6 +116,8 @@ spec:
         volumeMounts:
         - name: ml-data
           mountPath: /app/data
+        - name: ml-logs
+          mountPath: /app/ml-logs
 ---
 # 뉴스 크롤링 CronWorkflow (1시간마다 실행)
 apiVersion: argoproj.io/v1alpha1
@@ -149,7 +155,7 @@ spec:
         - name: TZ
           value: "Asia/Seoul"
         - name: ML_LOG_DIR
-          value: "/app/data/logs"
+          value: "/app/ml-logs"
         - name: DATABASE_URL
           valueFrom:
             configMapKeyRef:
@@ -158,7 +164,13 @@ spec:
         volumeMounts:
         - name: ml-data
           mountPath: /app/data
+        - name: ml-logs
+          mountPath: /app/ml-logs
     volumes:
     - name: ml-data
       persistentVolumeClaim:
         claimName: ml-data-pvc
+    - name: ml-logs
+      hostPath:
+        path: /Users/choihyun-young/Library/Logs/StockSense/ml
+        type: DirectoryOrCreate
