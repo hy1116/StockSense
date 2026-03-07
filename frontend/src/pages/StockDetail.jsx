@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { getStockDetail, getStockChart, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock, getPredictionAccuracy, checkWatchlist, addToWatchlist, removeFromWatchlist } from '../services/api'
+import { getStockDetail, getStockChart, getStockPrediction, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock, getPredictionAccuracy, checkWatchlist, addToWatchlist, removeFromWatchlist } from '../services/api'
 import { createChart } from 'lightweight-charts'
 import './StockDetail.css'
 
@@ -37,6 +37,10 @@ function StockDetail() {
   // 적중률 관련 state
   const [accuracy, setAccuracy] = useState(null)
   const [accuracyLoading, setAccuracyLoading] = useState(false)
+
+  // AI 예측 상태 (별도 로딩)
+  const [prediction, setPrediction] = useState(null)
+  const [predictionLoading, setPredictionLoading] = useState(true)
 
   // AI 예측 상세 드롭다운
   const [showPredDetails, setShowPredDetails] = useState(true)
@@ -118,6 +122,19 @@ function StockDetail() {
       if (showLoading) {
         setLoading(false)
       }
+    }
+  }
+
+  // AI 예측 조회 (캐시 없음 - 항상 최신)
+  const fetchPrediction = async () => {
+    setPredictionLoading(true)
+    try {
+      const data = await getStockPrediction(symbol)
+      setPrediction(data)
+    } catch (err) {
+      console.error('Error fetching prediction:', err)
+    } finally {
+      setPredictionLoading(false)
     }
   }
 
@@ -538,6 +555,7 @@ function StockDetail() {
   useEffect(() => {
     fetchStockDetail(true)
     fetchChartData()
+    fetchPrediction()
 
     if (isMarketOpen() && period === '1D') {
       autoRefreshIntervalRef.current = setInterval(() => {
@@ -593,7 +611,7 @@ function StockDetail() {
     )
   }
 
-  const { basic_info, chart_data, prediction } = stockData
+  const { basic_info, chart_data } = stockData
 
   // 예측 기반 등락 계산
   const predictionChange = prediction
@@ -695,13 +713,23 @@ function StockDetail() {
       </section>
 
       {/* AI 예측 */}
-      {prediction && (
-        <section className="sd-card">
-          <h2>AI 예측</h2>
-          <div className="sd-prediction">
+      <section className="sd-card">
+        <h2>AI 예측</h2>
+        {predictionLoading ? (
+          <div className="sd-pred-skeleton">
+            <div className="sd-pred-skeleton-hero">
+              <div className="sd-skeleton-block" style={{ width: '38%', height: '2.5rem' }} />
+              <div className="sd-skeleton-block" style={{ width: '22%', height: '2rem' }} />
+            </div>
+            <div className="sd-skeleton-block" style={{ width: '100%', height: '1.4rem', marginTop: '1rem' }} />
+            <div className="sd-skeleton-block" style={{ width: '100%', height: '3.5rem', marginTop: '0.75rem' }} />
+            <div className="sd-skeleton-block" style={{ width: '60%', height: '1rem', marginTop: '0.75rem' }} />
+          </div>
+        ) : prediction ? (
+        <div className="sd-prediction">
             <div className="sd-pred-hero">
               <div className="sd-pred-price-block">
-                <span className="sd-pred-label">예측가</span>
+                <span className="sd-pred-label">단기 예측가 <small>(1거래일)</small></span>
                 <span className={`sd-pred-price${predictionChange !== null ? (predictionChange >= 0 ? ' price-up' : ' price-down') : ''}`}>{formatPrice(Math.round(prediction.predicted_price))}</span>
                 {predictionChange !== null && (
                   <span className={`sd-pred-diff ${predictionChange >= 0 ? 'price-up' : 'price-down'}`}>
@@ -714,6 +742,60 @@ function StockDetail() {
                 <span>{prediction.prediction_date}</span>
               </div>
             </div>
+            {prediction.predicted_price_long != null && (() => {
+              const longChange = (prediction.predicted_price_long - basic_info.current_price) / basic_info.current_price * 100
+              return (
+                <div className="sd-pred-hero sd-pred-hero-long">
+                  <div className="sd-pred-price-block">
+                    <span className="sd-pred-label">장기 예측가 <small>(20거래일 · 약 1개월)</small></span>
+                    <span className={`sd-pred-price${longChange >= 0 ? ' price-up' : ' price-down'}`}>
+                      {formatPrice(Math.round(prediction.predicted_price_long))}
+                    </span>
+                    <span className={`sd-pred-diff ${longChange >= 0 ? 'price-up' : 'price-down'}`}>
+                      {longChange >= 0 ? '+' : ''}{longChange.toFixed(2)}%
+                    </span>
+                  </div>
+                  <div className="sd-pred-date">
+                    <span className="sd-pred-label">목표일</span>
+                    <span>{prediction.prediction_date_long}</span>
+                  </div>
+                </div>
+              )
+            })()}
+            {/* ML 한줄 의견 */}
+            {prediction.details && prediction.details.model_used !== 'rule_based' && (() => {
+              const rf = prediction.details.recommendation_factors
+              const ti = prediction.details.technical_indicators
+              const modelLabel = prediction.details.model_used === 'ensemble' ? 'XGBoost+LSTM 앙상블' : prediction.details.model_used === 'xgboost' ? 'XGBoost' : 'LSTM'
+              const trendText = prediction.trend
+              const rec = prediction.recommendation
+              const conf = Math.round(prediction.confidence * 100)
+              let reason = ''
+              if (rf) {
+                const scores = [
+                  { label: '추세', v: rf.trend_score },
+                  { label: 'RSI', v: rf.rsi_score },
+                  { label: 'MACD', v: rf.macd_score },
+                  { label: '볼린저밴드', v: rf.bb_score },
+                ]
+                const topPos = scores.filter(s => s.v > 0).sort((a, b) => b.v - a.v)[0]
+                const topNeg = scores.filter(s => s.v < 0).sort((a, b) => a.v - b.v)[0]
+                if (rec === '적극 매수' || rec === '매수') {
+                  reason = topPos ? `${topPos.label} 지표가 긍정적이며` : '기술적 지표 종합 결과'
+                } else if (rec === '적극 매도' || rec === '매도') {
+                  reason = topNeg ? `${topNeg.label} 지표가 부정적이며` : '기술적 지표 종합 결과'
+                } else {
+                  reason = '기술적 지표가 혼재하여'
+                }
+              }
+              const opinion = `${modelLabel} 모델 분석 결과, ${reason} ${trendText} 추세로 "${rec}" 의견입니다. (신뢰도 ${conf}%)`
+              return (
+                <div className="sd-ml-opinion">
+                  <span className="sd-ml-opinion-icon">🤖</span>
+                  <span className="sd-ml-opinion-text">{opinion}</span>
+                </div>
+              )
+            })()}
             <div className="sd-pred-badges">
               <div className="sd-pred-badge-item">
                 <span className="sd-pred-badge-label">추세</span>
@@ -827,24 +909,32 @@ function StockDetail() {
                              prediction.details.model_used === 'lstm' ? 'LSTM 단독' : '규칙 기반 (Fallback)'}
                           </span>
                         </div>
-                        {prediction.details.xgb_predicted != null && (
-                          <div className="sd-detail-model-row">
-                            <span className="sd-detail-model-name">XGBoost (60%)</span>
-                            <span className="sd-detail-model-price">{formatPrice(Math.round(prediction.details.xgb_predicted))}</span>
-                            <span className={`sd-detail-model-diff ${prediction.details.xgb_predicted >= prediction.current_price ? 'price-up' : 'price-down'}`}>
-                              {((prediction.details.xgb_predicted - prediction.current_price) / prediction.current_price * 100).toFixed(2)}%
-                            </span>
-                          </div>
-                        )}
-                        {prediction.details.lstm_predicted != null && (
-                          <div className="sd-detail-model-row">
-                            <span className="sd-detail-model-name">LSTM (40%)</span>
-                            <span className="sd-detail-model-price">{formatPrice(Math.round(prediction.details.lstm_predicted))}</span>
-                            <span className={`sd-detail-model-diff ${prediction.details.lstm_predicted >= prediction.current_price ? 'price-up' : 'price-down'}`}>
-                              {((prediction.details.lstm_predicted - prediction.current_price) / prediction.current_price * 100).toFixed(2)}%
-                            </span>
-                          </div>
-                        )}
+                        {prediction.details.xgb_predicted != null && (() => {
+                          const w = prediction.details.ensemble_weights
+                          const xgbPct = w ? Math.round(w.xgb_weight * 100) : 60
+                          return (
+                            <div className="sd-detail-model-row">
+                              <span className="sd-detail-model-name">XGBoost ({xgbPct}%)</span>
+                              <span className="sd-detail-model-price">{formatPrice(Math.round(prediction.details.xgb_predicted))}</span>
+                              <span className={`sd-detail-model-diff ${prediction.details.xgb_predicted >= prediction.current_price ? 'price-up' : 'price-down'}`}>
+                                {((prediction.details.xgb_predicted - prediction.current_price) / prediction.current_price * 100).toFixed(2)}%
+                              </span>
+                            </div>
+                          )
+                        })()}
+                        {prediction.details.lstm_predicted != null && (() => {
+                          const w = prediction.details.ensemble_weights
+                          const lstmPct = w ? Math.round(w.lstm_weight * 100) : 40
+                          return (
+                            <div className="sd-detail-model-row">
+                              <span className="sd-detail-model-name">LSTM ({lstmPct}%)</span>
+                              <span className="sd-detail-model-price">{formatPrice(Math.round(prediction.details.lstm_predicted))}</span>
+                              <span className={`sd-detail-model-diff ${prediction.details.lstm_predicted >= prediction.current_price ? 'price-up' : 'price-down'}`}>
+                                {((prediction.details.lstm_predicted - prediction.current_price) / prediction.current_price * 100).toFixed(2)}%
+                              </span>
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
 
@@ -1171,8 +1261,8 @@ function StockDetail() {
               * 이 예측은 XGBoost + LSTM 앙상블 모델과 뉴스 감성 분석을 활용한 AI 분석이며, 투자 권유가 아닙니다.
             </p>
           </div>
-        </section>
-      )}
+        ) : null}
+      </section>
 
       {/* 주문 */}
       <section className="sd-card">

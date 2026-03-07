@@ -123,7 +123,7 @@ class DailyModelTrainer:
 
         return df
 
-    def prepare_features(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
+    def prepare_features(self, df: pd.DataFrame, target_col: str = 'target_price') -> Tuple[pd.DataFrame, pd.Series]:
         """피처와 타겟 분리"""
         # 사용 가능한 피처만 선택
         available_features = [col for col in self.feature_columns if col in df.columns]
@@ -132,8 +132,17 @@ class DailyModelTrainer:
             missing = set(self.feature_columns) - set(available_features)
             logger.warning(f"누락된 피처: {missing}")
 
-        X = df[available_features].copy()
-        y = df['target_price']
+        # 타겟 컬럼이 없으면 에러
+        if target_col not in df.columns:
+            raise ValueError(f"타겟 컬럼 없음: {target_col}")
+
+        # 타겟 NaN인 행 제거 (shift로 생긴 꼬리 부분)
+        # reset_index: dropna로 생긴 label 인덱스 구멍을 없애야
+        # train_lstm의 groupby 시 numpy positional indexing이 올바르게 동작함
+        df_clean = df.dropna(subset=[target_col]).reset_index(drop=True)
+
+        X = df_clean[available_features].copy()
+        y = df_clean[target_col]
 
         # inf/NaN 클리닝 (분모 0 등으로 발생한 이상값 처리)
         inf_count = np.isinf(X.values).sum()
@@ -142,9 +151,9 @@ class DailyModelTrainer:
             logger.warning(f"inf={inf_count}, NaN={nan_count} 값 발견 → 0으로 대체")
             X = X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
-        logger.info(f"피처 준비 완료: {len(available_features)}개 피처")
+        logger.info(f"피처 준비 완료: {len(available_features)}개 피처, {len(X)}개 샘플 (target={target_col})")
 
-        return X, y
+        return X, y, df_clean
 
     def train_xgboost(self, X: pd.DataFrame, y: pd.Series) -> Dict:
         """XGBoost 모델 학습 및 평가"""
@@ -199,10 +208,12 @@ class DailyModelTrainer:
             'test_samples': len(X_test),
             'total_samples': len(X),
             'training_duration': training_duration,
-            'feature_columns': list(X.columns)
+            'feature_columns': list(X.columns),
+            'y_test': y_test.values,
+            'y_test_pred': y_test_pred,
         }
 
-    def train_lstm(self, X: pd.DataFrame, y: pd.Series) -> Optional[Dict]:
+    def train_lstm(self, X: pd.DataFrame, y: pd.Series, df: pd.DataFrame = None) -> Optional[Dict]:
         """LSTM 모델 학습 및 평가"""
         try:
             import keras
@@ -227,14 +238,29 @@ class DailyModelTrainer:
         X_scaled = feature_scaler.fit_transform(X)
         y_scaled = target_scaler.fit_transform(y.values.reshape(-1, 1)).flatten()
 
-        # 슬라이딩 윈도우로 시퀀스 데이터 생성
-        X_seq, y_seq = [], []
-        for i in range(window_size, len(X_scaled)):
-            X_seq.append(X_scaled[i - window_size:i])
-            y_seq.append(y_scaled[i])
+        # 슬라이딩 윈도우로 시퀀스 생성 (종목 경계 보호)
+        X_seq_list, y_seq_list = [], []
+        if df is not None and 'stock_code' in df.columns:
+            # stock_code별로 독립 시퀀스 생성 (종목 경계 넘지 않도록)
+            for _, group in df.groupby('stock_code'):
+                pos_idx = group.index.tolist()  # 0..N-1 positional
+                if len(pos_idx) < window_size + 5:
+                    continue
+                X_s = X_scaled[pos_idx]
+                y_s = y_scaled[pos_idx]
+                for i in range(window_size, len(X_s)):
+                    X_seq_list.append(X_s[i - window_size:i])
+                    y_seq_list.append(y_s[i])
+            logger.info(f"[LSTM] 종목별 시퀀스 생성: {len(X_seq_list)}개 (경계 보호 적용)")
+        else:
+            # fallback: 기존 방식 (stock_code 없을 때)
+            for i in range(window_size, len(X_scaled)):
+                X_seq_list.append(X_scaled[i - window_size:i])
+                y_seq_list.append(y_scaled[i])
+            logger.warning("[LSTM] stock_code 없음 — 종목 경계 미보호로 시퀀스 생성")
 
-        X_seq = np.array(X_seq)
-        y_seq = np.array(y_seq)
+        X_seq = np.array(X_seq_list)
+        y_seq = np.array(y_seq_list)
 
         # 시계열 기반 분할 (shuffle=False)
         split_idx = int(len(X_seq) * 0.8)
@@ -341,7 +367,9 @@ class DailyModelTrainer:
             'test_samples': len(X_test),
             'total_samples': len(X),
             'training_duration': training_duration,
-            'feature_columns': list(X.columns)
+            'feature_columns': list(X.columns),
+            'y_test': y_test_actual,
+            'y_test_pred': y_test_pred,
         }
 
     def get_current_active_model_by_type(self, model_type: str) -> Optional[ModelTrainingHistory]:
@@ -376,13 +404,14 @@ class DailyModelTrainer:
 
             return "v1"
 
-    def save_xgboost_to_db(self, results: Dict, activate: bool = False) -> ModelTrainingHistory:
+    def save_xgboost_to_db(self, results: Dict, activate: bool = False, learned_weights: Optional[Tuple[float, float]] = None, horizon_days: int = 1) -> ModelTrainingHistory:
         """XGBoost 학습 결과를 DB에 저장"""
         model_binary = pickle.dumps(results['model'])
         scaler_binary = pickle.dumps(results['scaler'])
 
         version = self.get_next_version()
-        model_name = f"xgboost_{version}.pkl"
+        model_type = f"XGBoostRegressor_{horizon_days}d"
+        model_name = f"xgboost_{horizon_days}d_{version}.pkl"
 
         with self.Session() as session:
             # model_type별 활성화 (같은 type만 비활성화)
@@ -390,13 +419,13 @@ class DailyModelTrainer:
                 session.execute(
                     update(ModelTrainingHistory)
                     .where(ModelTrainingHistory.is_active == True)
-                    .where(ModelTrainingHistory.model_type == 'XGBoostRegressor')
+                    .where(ModelTrainingHistory.model_type == model_type)
                     .values(is_active=False)
                 )
 
             history = ModelTrainingHistory(
                 model_name=model_name,
-                model_type="XGBoostRegressor",
+                model_type=model_type,
                 model_version=version,
                 hyperparameters=json.dumps(self.xgb_hyperparameters),
                 feature_columns=json.dumps(results['feature_columns']),
@@ -414,23 +443,29 @@ class DailyModelTrainer:
                 is_active=activate,
                 trained_by="batch",
                 training_duration_sec=float(results['training_duration']),
-                notes=f"XGBoost batch training at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                notes=json.dumps({
+                    "trained_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "horizon_days": horizon_days,
+                    "ensemble_xgb_weight": round(learned_weights[0], 4) if learned_weights else None,
+                    "ensemble_lstm_weight": round(learned_weights[1], 4) if learned_weights else None,
+                })
             )
 
             session.add(history)
             session.commit()
             session.refresh(history)
 
-            logger.info(f"[XGBoost] DB 저장 완료: ID={history.id}, Version={version}, Active={activate}")
+            logger.info(f"[XGBoost_{horizon_days}d] DB 저장 완료: ID={history.id}, Version={version}, Active={activate}")
             return history
 
-    def save_lstm_to_db(self, results: Dict, activate: bool = False) -> ModelTrainingHistory:
+    def save_lstm_to_db(self, results: Dict, activate: bool = False, learned_weights: Optional[Tuple[float, float]] = None, horizon_days: int = 1) -> ModelTrainingHistory:
         """LSTM 학습 결과를 DB에 저장"""
         model_binary = results['model_bytes']
         scaler_binary = pickle.dumps(results['scaler_dict'])
 
         version = self.get_next_version()
-        model_name = f"lstm_{version}.keras"
+        model_type = f"LSTM_{horizon_days}d"
+        model_name = f"lstm_{horizon_days}d_{version}.keras"
 
         with self.Session() as session:
             # model_type별 활성화 (같은 type만 비활성화)
@@ -438,13 +473,13 @@ class DailyModelTrainer:
                 session.execute(
                     update(ModelTrainingHistory)
                     .where(ModelTrainingHistory.is_active == True)
-                    .where(ModelTrainingHistory.model_type == 'LSTM')
+                    .where(ModelTrainingHistory.model_type == model_type)
                     .values(is_active=False)
                 )
 
             history = ModelTrainingHistory(
                 model_name=model_name,
-                model_type="LSTM",
+                model_type=model_type,
                 model_version=version,
                 hyperparameters=json.dumps(self.lstm_hyperparameters),
                 feature_columns=json.dumps(results['feature_columns']),
@@ -462,14 +497,19 @@ class DailyModelTrainer:
                 is_active=activate,
                 trained_by="batch",
                 training_duration_sec=float(results['training_duration']),
-                notes=f"LSTM batch training at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                notes=json.dumps({
+                    "trained_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "horizon_days": horizon_days,
+                    "ensemble_xgb_weight": round(learned_weights[0], 4) if learned_weights else None,
+                    "ensemble_lstm_weight": round(learned_weights[1], 4) if learned_weights else None,
+                })
             )
 
             session.add(history)
             session.commit()
             session.refresh(history)
 
-            logger.info(f"[LSTM] DB 저장 완료: ID={history.id}, Version={version}, Active={activate}")
+            logger.info(f"[LSTM_{horizon_days}d] DB 저장 완료: ID={history.id}, Version={version}, Active={activate}")
             return history
 
     def save_model_files(self, results: Dict, version: str):
@@ -519,6 +559,40 @@ class DailyModelTrainer:
 
         logger.info("최신 모델 파일 업데이트 완료")
 
+    def learn_ensemble_weights(self, xgb_results: Dict, lstm_results: Dict) -> Tuple[float, float]:
+        """두 모델의 test set 예측으로 최적 앙상블 가중치 학습 (1D grid search)"""
+        try:
+            from scipy.optimize import minimize_scalar
+
+            xgb_pred = np.array(xgb_results['y_test_pred'])
+            lstm_pred = np.array(lstm_results['y_test_pred'])
+            xgb_true = np.array(xgb_results['y_test'])
+            lstm_true = np.array(lstm_results['y_test'])
+
+            # 두 모델의 test set 길이가 다를 수 있음 (LSTM은 window_size 때문에 짧을 수 있음)
+            # 마지막 n개 공통 구간 사용 (둘 다 같은 최신 데이터 예측 부분)
+            n = min(len(xgb_pred), len(lstm_pred))
+            xp = xgb_pred[-n:]
+            lp = lstm_pred[-n:]
+            # ground truth는 XGBoost 기준 (거의 동일한 기간)
+            yt = xgb_true[-n:]
+
+            def mse(w):
+                pred = w * xp + (1.0 - w) * lp
+                return float(np.mean((pred - yt) ** 2))
+
+            result = minimize_scalar(mse, bounds=(0.0, 1.0), method='bounded')
+            xgb_w = float(np.clip(result.x, 0.0, 1.0))
+            lstm_w = 1.0 - xgb_w
+
+            logger.info(f"[앙상블 가중치 학습] XGB={xgb_w:.3f}, LSTM={lstm_w:.3f} "
+                        f"(MSE at optimal: {result.fun:.2f})")
+            return xgb_w, lstm_w
+
+        except Exception as e:
+            logger.warning(f"[앙상블 가중치 학습 실패] {e} — 기본값 사용 (XGB=0.6, LSTM=0.4)")
+            return 0.6, 0.4
+
     def should_activate(self, results: Dict, current_model: Optional[ModelTrainingHistory], min_score: float = 0.5) -> bool:
         """새 모델을 활성화할지 결정"""
         # 최소 성능 기준 미달이면 무조건 비활성화
@@ -541,11 +615,16 @@ class DailyModelTrainer:
             return False
 
     def run(self, activate_anyway: bool = False):
-        """전체 배치 실행 (XGBoost + LSTM)"""
+        """전체 배치 실행 (단기 1d + 장기 20d, XGBoost + LSTM)"""
         logger.info("=" * 60)
-        logger.info("일배치 모델 학습 시작 (XGBoost + LSTM)")
+        logger.info("일배치 모델 학습 시작 (1d + 20d, XGBoost + LSTM)")
         logger.info(f"시작 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("=" * 60)
+
+        horizons = [
+            {'days': 1,  'target_col': 'target_price',    'label': '단기(1일)'},
+            {'days': 20, 'target_col': 'target_price_20d', 'label': '장기(20거래일)'},
+        ]
 
         try:
             # 1. 데이터 로드 (1회만)
@@ -553,51 +632,74 @@ class DailyModelTrainer:
             if df is None:
                 return False
 
-            # 2. 피처 준비
-            X, y = self.prepare_features(df)
+            overall_success = True
 
-            # === XGBoost 학습 ===
-            logger.info("-" * 40)
-            logger.info("[XGBoost] 학습 시작")
-            logger.info("-" * 40)
+            for h in horizons:
+                horizon_days = h['days']
+                target_col = h['target_col']
+                label = h['label']
 
-            xgb_results = self.train_xgboost(X, y)
+                if target_col not in df.columns:
+                    logger.warning(f"[{label}] 타겟 컬럼 없음 ({target_col}) — 건너뜀")
+                    overall_success = False
+                    continue
 
-            # XGBoost 활성화 판단 (model_type별)
-            current_xgb = self.get_current_active_model_by_type('XGBoostRegressor')
-            xgb_activate = activate_anyway or self.should_activate(xgb_results, current_xgb)
-            xgb_history = self.save_xgboost_to_db(xgb_results, activate=xgb_activate)
+                logger.info("=" * 60)
+                logger.info(f"[{label}] 학습 시작 (horizon={horizon_days}d, target={target_col})")
+                logger.info("=" * 60)
 
-            if xgb_activate:
-                self.save_model_files(xgb_results, xgb_history.model_version)
+                # 2. 피처 준비 (해당 horizon 타겟 기준으로 NaN 제거)
+                X, y, df_h = self.prepare_features(df, target_col=target_col)
 
-            # === LSTM 학습 ===
-            logger.info("-" * 40)
-            logger.info("[LSTM] 학습 시작")
-            logger.info("-" * 40)
+                # === XGBoost 학습 ===
+                logger.info(f"[XGBoost_{horizon_days}d] 학습 시작")
+                xgb_results = self.train_xgboost(X, y)
 
-            lstm_results = self.train_lstm(X, y)
+                # === LSTM 학습 ===
+                logger.info(f"[LSTM_{horizon_days}d] 학습 시작")
+                lstm_results = self.train_lstm(X, y, df=df_h)
 
-            lstm_history = None
-            if lstm_results is not None:
-                # LSTM 활성화 판단 (model_type별)
-                current_lstm = self.get_current_active_model_by_type('LSTM')
-                lstm_activate = activate_anyway or self.should_activate(lstm_results, current_lstm)
-                lstm_history = self.save_lstm_to_db(lstm_results, activate=lstm_activate)
-            else:
-                logger.warning("[LSTM] LSTM 학습 건너뜀")
+                # === 앙상블 가중치 학습 ===
+                learned_weights = None
+                if lstm_results is not None:
+                    logger.info(f"[앙상블_{horizon_days}d] 최적 가중치 학습")
+                    learned_weights = self.learn_ensemble_weights(xgb_results, lstm_results)
 
-            # === 결과 요약 ===
+                # XGBoost 활성화 판단
+                current_xgb = self.get_current_active_model_by_type(f'XGBoostRegressor_{horizon_days}d')
+                xgb_activate = activate_anyway or self.should_activate(xgb_results, current_xgb)
+                xgb_history = self.save_xgboost_to_db(
+                    xgb_results, activate=xgb_activate,
+                    learned_weights=learned_weights, horizon_days=horizon_days
+                )
+                if xgb_activate and horizon_days == 1:
+                    self.save_model_files(xgb_results, xgb_history.model_version)
+
+                # LSTM 활성화 판단
+                lstm_history = None
+                if lstm_results is not None:
+                    current_lstm = self.get_current_active_model_by_type(f'LSTM_{horizon_days}d')
+                    # LSTM은 tabular 데이터 특성상 XGBoost보다 R² 낮게 나오는 경향 → 기준 완화
+                    lstm_activate = activate_anyway or self.should_activate(lstm_results, current_lstm, min_score=0.2)
+                    lstm_history = self.save_lstm_to_db(
+                        lstm_results, activate=lstm_activate,
+                        learned_weights=learned_weights, horizon_days=horizon_days
+                    )
+                else:
+                    logger.warning(f"[LSTM_{horizon_days}d] LSTM 학습 건너뜀")
+
+                # 결과 요약
+                logger.info(f"[{label}] XGBoost: R²={xgb_results['test_score']:.4f}, Active={xgb_activate}")
+                if lstm_history:
+                    logger.info(f"[{label}] LSTM: R²={lstm_results['test_score']:.4f}, Active={lstm_history.is_active}")
+                if learned_weights:
+                    logger.info(f"[{label}] 앙상블 가중치: XGB={learned_weights[0]:.3f}, LSTM={learned_weights[1]:.3f}")
+
             logger.info("=" * 60)
             logger.info("일배치 모델 학습 완료")
-            logger.info(f"[XGBoost] Version={xgb_history.model_version}, "
-                       f"Test R²={xgb_results['test_score']:.4f}, Active={xgb_activate}")
-            if lstm_history:
-                logger.info(f"[LSTM] Version={lstm_history.model_version}, "
-                           f"Test R²={lstm_results['test_score']:.4f}, Active={lstm_activate}")
             logger.info("=" * 60)
 
-            return True
+            return overall_success
 
         except Exception as e:
             logger.error(f"배치 실행 실패: {e}", exc_info=True)

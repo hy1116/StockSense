@@ -124,12 +124,15 @@ class PredictionResult(BaseModel):
     stock_code: str = Field(..., description="종목코드")
     stock_name: str = Field(..., description="종목명")
     current_price: int = Field(..., description="현재가")
-    predicted_price: float = Field(..., description="예측가")
-    prediction_date: str = Field(..., description="예측 날짜")
-    confidence: float = Field(..., description="예측 신뢰도 (0-1)")
+    predicted_price: float = Field(..., description="단기 예측가 (1거래일)")
+    prediction_date: str = Field(..., description="단기 예측 날짜")
+    confidence: float = Field(..., description="단기 예측 신뢰도 (0-1)")
     trend: str = Field(..., description="추세 (상승/하락/보합)")
     recommendation: str = Field(..., description="투자의견 (매수/매도/보유)")
     details: Optional[dict] = Field(None, description="예측 상세 정보 (기술적 지표, 모델별 예측값 등)")
+    predicted_price_long: Optional[float] = Field(None, description="장기 예측가 (20거래일 ≈ 1개월)")
+    prediction_date_long: Optional[str] = Field(None, description="장기 예측 날짜")
+    confidence_long: Optional[float] = Field(None, description="장기 예측 신뢰도 (0-1)")
 
 
 class StockDetailInfo(BaseModel):

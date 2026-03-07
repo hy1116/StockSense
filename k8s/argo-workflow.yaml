@@ -54,6 +54,9 @@ spec:
       - - name: financial-data
           template: run-task
           arguments: { parameters: [{name: cmd, value: "python -m ml.collect_financial_data"}] }
+      - - name: evaluate-predictions
+          template: run-task
+          arguments: { parameters: [{name: cmd, value: "python -m ml.evaluate_predictions"}] }
       - - name: preprocessing
           template: run-task
           arguments: { parameters: [{name: cmd, value: "python -m ml.preprocess_data"}] }

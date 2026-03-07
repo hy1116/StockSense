@@ -35,6 +35,7 @@ from app.schemas.portfolio import (
 from app.services.kis_api import get_kis_client, KISAPIClient
 from app.services.prediction import get_prediction_service, PredictionService
 from app.services.redis_client import get_redis_client
+from app.api.prediction import _save_prediction_to_db
 from app.services.naver_finance import get_naver_finance_client
 from app.database import get_db
 from app.models.stock import Stock
@@ -189,6 +190,36 @@ async def get_stock_price(
         return price_info
 
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stock/{stock_code}/prediction", response_model=PredictionResult)
+async def get_stock_prediction_fresh(
+    stock_code: str,
+    client: KISAPIClient = Depends(get_kis_client),
+    predictor: PredictionService = Depends(get_prediction_service)
+):
+    """종목 AI 예측 (캐시 없음 - 항상 최신 예측 반환)"""
+    try:
+        price_result = await run_sync(client.get_stock_price, stock_code)
+        if price_result.get("rt_cd") != "0":
+            raise HTTPException(status_code=400, detail="현재가 조회 실패")
+
+        stock_name = price_result.get("output", {}).get("hts_kor_isnm", "")
+
+        chart_result = await run_sync(client.get_daily_chart, stock_code, period="D", count=100)
+        if chart_result.get("rt_cd") != "0":
+            raise HTTPException(status_code=400, detail="차트 데이터 조회 실패")
+
+        output2 = chart_result.get("output2", [])
+        pred_result = await run_sync(predictor.predict_price, stock_code, stock_name, output2)
+        # 예측 결과 DB 저장 (적중률 추적용)
+        _save_prediction_to_db(pred_result)
+        return PredictionResult(**pred_result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"예측 조회 실패 {stock_code}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

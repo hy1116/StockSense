@@ -197,6 +197,13 @@ export const getStockDetail = async (symbol) => {
   return response.data
 }
 
+export const getStockPrediction = async (symbol) => {
+  const response = await api.get(`/api/portfolio/stock/${symbol}/prediction`, {
+    timeout: 30000
+  })
+  return response.data
+}
+
 export const getStockIntraday = async (symbol, interval = 1) => {
   const response = await api.get(`/api/portfolio/stock/${symbol}/intraday`, {
     params: { interval }

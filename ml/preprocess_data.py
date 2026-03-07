@@ -113,17 +113,16 @@ class DataPreprocessor:
         return df
 
     def create_target(self, df: pd.DataFrame, days_ahead: int = 1) -> pd.DataFrame:
-        """타겟 변수 생성 (미래 가격)"""
+        """타겟 변수 생성 (단기 1일 + 장기 20거래일)"""
         df = df.copy()
 
-        # 다음날 종가
-        df["target_price"] = df["close"].shift(-days_ahead)
-
-        # 다음날 수익률
+        # 단기: 다음날 종가 (1거래일 후)
+        df["target_price"] = df["close"].shift(-1)
         df["target_return"] = (df["target_price"] / df["close"]) - 1
-
-        # 상승/하락 (분류용)
         df["target_direction"] = (df["target_return"] > 0).astype(int)
+
+        # 장기: 20거래일 후 종가 (≈ 1개월)
+        df["target_price_20d"] = df["close"].shift(-20)
 
         return df
 
@@ -340,6 +339,8 @@ class DataPreprocessor:
         dfs = []
         for file in all_files:
             df = pd.read_csv(file)
+            stock_code = file.stem.replace("_features", "")
+            df["stock_code"] = stock_code  # LSTM 종목 경계 구분용
             dfs.append(df)
             print(f"   Loaded {file.name}: {len(df)} records")
 

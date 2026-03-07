@@ -66,6 +66,21 @@ class PredictionService:
         self.lstm_target_scaler = None
         self.lstm_info = {}
 
+        # 학습된 앙상블 가중치 - 단기 (없으면 R² 기반 동적 계산)
+        self.learned_xgb_weight = None
+        self.learned_lstm_weight = None
+
+        # 장기 모델 (20거래일 ≈ 1개월)
+        self.xgb_model_long = None
+        self.xgb_scaler_long = None
+        self.xgb_info_long = {}
+        self.lstm_model_long = None
+        self.lstm_feature_scaler_long = None
+        self.lstm_target_scaler_long = None
+        self.lstm_info_long = {}
+        self.learned_xgb_weight_long = None
+        self.learned_lstm_weight_long = None
+
         self.feature_columns = []
         self.model_version = None
         self.model_info = {}
@@ -145,16 +160,28 @@ class PredictionService:
                         'rmse': xgb_record.rmse,
                         'train_samples': xgb_record.train_samples
                     }
+                    # notes에서 학습된 앙상블 가중치 로드
+                    if xgb_record.notes:
+                        try:
+                            notes_data = json.loads(xgb_record.notes)
+                            xw = notes_data.get('ensemble_xgb_weight')
+                            lw = notes_data.get('ensemble_lstm_weight')
+                            if xw is not None and lw is not None:
+                                self.learned_xgb_weight = float(xw)
+                                self.learned_lstm_weight = float(lw)
+                                logger.info(f"학습된 앙상블 가중치 로드: XGB={xw:.3f}, LSTM={lw:.3f}")
+                        except Exception:
+                            pass
                     logger.info(f"XGBoost loaded from DB: {xgb_record.model_name} "
                               f"(test_score={xgb_record.test_score:.4f})")
                 else:
                     logger.info("No active XGBoost/GBR model found in DB")
 
-                # LSTM 모델 로드
+                # LSTM 단기 모델 로드
                 lstm_result = session.execute(
                     select(ModelTrainingHistory)
                     .where(ModelTrainingHistory.is_active == True)
-                    .where(ModelTrainingHistory.model_type == 'LSTM')
+                    .where(ModelTrainingHistory.model_type.in_(['LSTM', 'LSTM_1d']))
                     .order_by(ModelTrainingHistory.trained_at.desc())
                     .limit(1)
                 )
@@ -163,13 +190,61 @@ class PredictionService:
                 if lstm_record and lstm_record.model_binary and lstm_record.scaler_binary:
                     self._load_lstm_from_record(lstm_record)
                 else:
-                    logger.info("No active LSTM model found in DB")
+                    logger.info("No active LSTM (1d) model found in DB")
+
+                # XGBoost 장기 모델 로드
+                xgb_long_result = session.execute(
+                    select(ModelTrainingHistory)
+                    .where(ModelTrainingHistory.is_active == True)
+                    .where(ModelTrainingHistory.model_type == 'XGBoostRegressor_20d')
+                    .order_by(ModelTrainingHistory.trained_at.desc())
+                    .limit(1)
+                )
+                xgb_long_record = xgb_long_result.scalar_one_or_none()
+
+                if xgb_long_record and xgb_long_record.model_binary and xgb_long_record.scaler_binary:
+                    self.xgb_model_long = pickle.loads(xgb_long_record.model_binary)
+                    self.xgb_scaler_long = pickle.loads(xgb_long_record.scaler_binary)
+                    self.xgb_info_long = {
+                        'id': xgb_long_record.id,
+                        'version': xgb_long_record.model_version,
+                        'test_score': xgb_long_record.test_score,
+                    }
+                    if xgb_long_record.notes:
+                        try:
+                            nd = json.loads(xgb_long_record.notes)
+                            xw = nd.get('ensemble_xgb_weight')
+                            lw = nd.get('ensemble_lstm_weight')
+                            if xw is not None and lw is not None:
+                                self.learned_xgb_weight_long = float(xw)
+                                self.learned_lstm_weight_long = float(lw)
+                        except Exception:
+                            pass
+                    logger.info(f"XGBoost_20d loaded from DB: {xgb_long_record.model_name} "
+                                f"(test_score={xgb_long_record.test_score:.4f})")
+                else:
+                    logger.info("No active XGBoost_20d model found in DB")
+
+                # LSTM 장기 모델 로드
+                lstm_long_result = session.execute(
+                    select(ModelTrainingHistory)
+                    .where(ModelTrainingHistory.is_active == True)
+                    .where(ModelTrainingHistory.model_type == 'LSTM_20d')
+                    .order_by(ModelTrainingHistory.trained_at.desc())
+                    .limit(1)
+                )
+                lstm_long_record = lstm_long_result.scalar_one_or_none()
+
+                if lstm_long_record and lstm_long_record.model_binary and lstm_long_record.scaler_binary:
+                    self._load_lstm_from_record(lstm_long_record, long=True)
+                else:
+                    logger.info("No active LSTM_20d model found in DB")
 
         except Exception as e:
             logger.warning(f"Failed to load models from DB: {e}")
 
-    def _load_lstm_from_record(self, record):
-        """DB 레코드에서 LSTM 모델 로드"""
+    def _load_lstm_from_record(self, record, long: bool = False):
+        """DB 레코드에서 LSTM 모델 로드 (long=True이면 장기 모델 속성에 저장)"""
         tmp_path = None
         try:
             import keras
@@ -179,25 +254,31 @@ class PredictionService:
                 tmp.write(record.model_binary)
                 tmp_path = tmp.name
 
-            self.lstm_model = keras.models.load_model(tmp_path)
-
-            # 스케일러 로드 (dict: feature_scaler, target_scaler)
+            model = keras.models.load_model(tmp_path)
             scaler_dict = pickle.loads(record.scaler_binary)
-            self.lstm_feature_scaler = scaler_dict['feature_scaler']
-            self.lstm_target_scaler = scaler_dict['target_scaler']
-
-            # 피처 컬럼이 아직 없으면 LSTM에서 로드
-            if not self.feature_columns and record.feature_columns:
-                self.feature_columns = json.loads(record.feature_columns)
-
-            self.lstm_info = {
+            info = {
                 'id': record.id,
                 'model_name': record.model_name,
                 'model_type': record.model_type,
                 'version': record.model_version,
                 'test_score': record.test_score,
             }
-            logger.info(f"LSTM loaded from DB: {record.model_name} "
+
+            if long:
+                self.lstm_model_long = model
+                self.lstm_feature_scaler_long = scaler_dict['feature_scaler']
+                self.lstm_target_scaler_long = scaler_dict['target_scaler']
+                self.lstm_info_long = info
+            else:
+                self.lstm_model = model
+                self.lstm_feature_scaler = scaler_dict['feature_scaler']
+                self.lstm_target_scaler = scaler_dict['target_scaler']
+                self.lstm_info = info
+                # 피처 컬럼이 아직 없으면 LSTM에서 로드
+                if not self.feature_columns and record.feature_columns:
+                    self.feature_columns = json.loads(record.feature_columns)
+
+            logger.info(f"LSTM{'_long' if long else ''} loaded from DB: {record.model_name} "
                       f"(test_score={record.test_score:.4f})")
 
         except Exception as e:
@@ -326,7 +407,11 @@ class PredictionService:
                 bb_upper, bb_lower, volumes, confidence=confidence
             )
 
-            prediction_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+            # 다음 영업일 (주말 건너뜀, 공휴일은 미처리)
+            _next = datetime.now() + timedelta(days=1)
+            while _next.weekday() >= 5:  # 5=토, 6=일
+                _next += timedelta(days=1)
+            prediction_date = _next.strftime("%Y-%m-%d")
 
             # 뉴스 감성 (details용 재사용 or 재조회)
             news_features = self._get_news_sentiment_features(stock_code)
@@ -344,19 +429,97 @@ class PredictionService:
             if len(close_prices) >= 2 and close_prices[1] > 0:
                 price_change_1d = round(float((close_prices[0] - close_prices[1]) / close_prices[1] * 100), 2)
 
-            # 앙상블 가중치 정보 (응답에 포함)
+            # volume_ratio / obv_normalized / mfi (details 표시용)
+            volume_ratio = 0.0
+            if len(volumes) >= 20:
+                vol_ma20 = np.mean(volumes[:20])
+                if vol_ma20 > 0:
+                    volume_ratio = float(volumes[0] / vol_ma20)
+
+            obv_normalized = 0.0
+            if len(volumes) >= 20 and len(close_prices) >= 20:
+                cp = close_prices[:20][::-1]
+                vl = volumes[:20][::-1]
+                obv = 0.0
+                for i in range(1, len(cp)):
+                    if cp[i] > cp[i - 1]:
+                        obv += vl[i]
+                    elif cp[i] < cp[i - 1]:
+                        obv -= vl[i]
+                vol_ma20 = np.mean(volumes[:20])
+                if vol_ma20 > 0:
+                    obv_normalized = obv / vol_ma20
+
+            mfi = 50.0
+            if len(close_prices) >= 15 and len(volumes) >= 15:
+                cp = close_prices[:15][::-1]
+                hp = high_prices[:15][::-1]
+                lp = low_prices[:15][::-1]
+                vl = volumes[:15][::-1]
+                tp = (hp + lp + cp) / 3
+                pos_flow, neg_flow = 0.0, 0.0
+                for i in range(1, len(tp)):
+                    mf = tp[i] * vl[i]
+                    if tp[i] > tp[i - 1]:
+                        pos_flow += mf
+                    else:
+                        neg_flow += mf
+                if neg_flow > 0:
+                    mfi = 100 - (100 / (1 + pos_flow / neg_flow))
+                elif pos_flow > 0:
+                    mfi = 100.0
+
+            # 장기 예측 (20거래일 ≈ 1개월)
+            has_long_model = self.use_ml and (self.xgb_model_long is not None or self.lstm_model_long is not None)
+            predicted_price_long = None
+            prediction_date_long = None
+            confidence_long = None
+            model_used_long = None
+
+            if has_long_model:
+                long_price, _, _, model_used_long = self._predict_ensemble(
+                    current_price, open_prices[0], high_prices[0], low_prices[0], volumes[0],
+                    ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
+                    close_prices, open_prices, high_prices, low_prices, volumes,
+                    stock_code=stock_code, chart_data=chart_data, long=True
+                )
+                predicted_price_long = round(long_price, 2)
+                # 20 영업일 후 날짜
+                _long_next = datetime.now()
+                biz_days = 0
+                while biz_days < 20:
+                    _long_next += timedelta(days=1)
+                    if _long_next.weekday() < 5:
+                        biz_days += 1
+                prediction_date_long = _long_next.strftime("%Y-%m-%d")
+                confidence_long = round(min(0.75, confidence - 0.05), 2)
+                logger.info(f"Long-term prediction for {stock_code}: {predicted_price_long:.2f} by {prediction_date_long}")
+
+            # 앙상블 가중치 정보 — _predict_ensemble과 동일한 우선순위로 실제 사용된 가중치 반영
             ensemble_weights = None
             if xgb_pred is not None and lstm_pred is not None:
-                xgb_r2 = max(0, self.xgb_info.get('test_score', 0))
-                lstm_r2 = max(0, self.lstm_info.get('test_score', 0))
-                total_r2 = xgb_r2 + lstm_r2
-                if total_r2 > 0:
-                    ensemble_weights = {
-                        "xgb_weight": round(xgb_r2 / total_r2, 3),
-                        "lstm_weight": round(lstm_r2 / total_r2, 3),
-                        "xgb_r2": round(xgb_r2, 4),
-                        "lstm_r2": round(lstm_r2, 4),
-                    }
+                if self.learned_xgb_weight is not None and self.learned_lstm_weight is not None:
+                    xgb_w = self.learned_xgb_weight
+                    lstm_w = self.learned_lstm_weight
+                    weight_src = "learned"
+                else:
+                    xgb_r2 = max(0, self.xgb_info.get('test_score', 0))
+                    lstm_r2 = max(0, self.lstm_info.get('test_score', 0))
+                    total_r2 = xgb_r2 + lstm_r2
+                    if total_r2 > 0:
+                        xgb_w = xgb_r2 / total_r2
+                        lstm_w = lstm_r2 / total_r2
+                    else:
+                        xgb_w = XGB_WEIGHT_DEFAULT
+                        lstm_w = LSTM_WEIGHT_DEFAULT
+                    weight_src = "r2_ratio"
+                ensemble_weights = {
+                    "xgb_weight": round(xgb_w, 3),
+                    "lstm_weight": round(lstm_w, 3),
+                    "weight_source": weight_src,
+                    "xgb_r2": round(max(0, self.xgb_info.get('test_score', 0)), 4),
+                    "lstm_r2": round(max(0, self.lstm_info.get('test_score', 0)), 4),
+                }
 
             details = {
                 "model_used": model_used,
@@ -409,6 +572,9 @@ class PredictionService:
                 "trend": trend,
                 "recommendation": recommendation,
                 "details": details,
+                "predicted_price_long": predicted_price_long,
+                "prediction_date_long": prediction_date_long,
+                "confidence_long": confidence_long,
             }
 
         except Exception as e:
@@ -418,44 +584,58 @@ class PredictionService:
     def _predict_ensemble(self, current_price, open_price, high_price, low_price, volume,
                           ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
                           close_prices, open_prices, high_prices, low_prices, volumes,
-                          stock_code=None, chart_data=None):
-        """XGBoost + LSTM 앙상블 예측 → (predicted, xgb_pred, lstm_pred, model_used)"""
+                          stock_code=None, chart_data=None, long: bool = False):
+        """XGBoost + LSTM 앙상블 예측 → (predicted, xgb_pred, lstm_pred, model_used)
+        long=True 이면 장기(20d) 모델 사용.
+        """
+        suffix = "_long" if long else ""
+        xgb_model = getattr(self, f"xgb_model{suffix}")
+        lstm_model = getattr(self, f"lstm_model{suffix}")
+        learned_xgb_w = getattr(self, f"learned_xgb_weight{suffix}")
+        learned_lstm_w = getattr(self, f"learned_lstm_weight{suffix}")
+        xgb_info = getattr(self, f"xgb_info{suffix}")
+        lstm_info = getattr(self, f"lstm_info{suffix}")
+
         xgb_pred = None
         lstm_pred = None
 
         # XGBoost 예측
-        if self.xgb_model is not None:
+        if xgb_model is not None:
             xgb_pred = self._predict_with_xgb(
                 current_price, open_price, high_price, low_price, volume,
                 ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
                 close_prices, volumes=volumes, high_prices=high_prices, low_prices=low_prices,
-                stock_code=stock_code
+                stock_code=stock_code, long=long
             )
-            logger.info(f"[XGBoost] prediction: {xgb_pred:.2f}")
+            logger.info(f"[XGBoost{'_long' if long else ''}] prediction: {xgb_pred:.2f}")
 
         # LSTM 예측
-        if self.lstm_model is not None and chart_data is not None:
-            lstm_pred = self._predict_with_lstm(chart_data, stock_code=stock_code)
+        if lstm_model is not None and chart_data is not None:
+            lstm_pred = self._predict_with_lstm(chart_data, stock_code=stock_code, long=long)
             if lstm_pred is not None:
-                logger.info(f"[LSTM] prediction: {lstm_pred:.2f}")
+                logger.info(f"[LSTM{'_long' if long else ''}] prediction: {lstm_pred:.2f}")
 
-        # 앙상블 결합 (모델별 test R² 비례 동적 가중치)
+        # 앙상블 결합 (학습된 가중치 우선, 없으면 test R² 비례)
         if xgb_pred is not None and lstm_pred is not None:
-            xgb_r2 = max(0, self.xgb_info.get('test_score', 0))
-            lstm_r2 = max(0, self.lstm_info.get('test_score', 0))
-            total_r2 = xgb_r2 + lstm_r2
-
-            if total_r2 > 0:
-                xgb_w = xgb_r2 / total_r2
-                lstm_w = lstm_r2 / total_r2
+            if learned_xgb_w is not None and learned_lstm_w is not None:
+                xgb_w = learned_xgb_w
+                lstm_w = learned_lstm_w
+                weight_src = "learned"
             else:
-                xgb_w = XGB_WEIGHT_DEFAULT
-                lstm_w = LSTM_WEIGHT_DEFAULT
+                xgb_r2 = max(0, xgb_info.get('test_score', 0))
+                lstm_r2 = max(0, lstm_info.get('test_score', 0))
+                total_r2 = xgb_r2 + lstm_r2
+                if total_r2 > 0:
+                    xgb_w = xgb_r2 / total_r2
+                    lstm_w = lstm_r2 / total_r2
+                else:
+                    xgb_w = XGB_WEIGHT_DEFAULT
+                    lstm_w = LSTM_WEIGHT_DEFAULT
+                weight_src = "r2_ratio"
 
             predicted = xgb_w * xgb_pred + lstm_w * lstm_pred
             model_used = "ensemble"
-            logger.info(f"[Ensemble] {xgb_w:.2f}*XGB(R²={xgb_r2:.4f}) + "
-                        f"{lstm_w:.2f}*LSTM(R²={lstm_r2:.4f}) = {predicted:.2f}")
+            logger.info(f"[Ensemble{'_long' if long else ''}/{weight_src}] {xgb_w:.2f}*XGB + {lstm_w:.2f}*LSTM = {predicted:.2f}")
         elif xgb_pred is not None:
             predicted = xgb_pred
             model_used = "xgboost"
@@ -471,7 +651,7 @@ class PredictionService:
     def _predict_with_xgb(self, current_price, open_price, high_price, low_price, volume,
                           ma5, ma10, ma20, rsi, bb_upper, bb_middle, bb_lower, macd, signal,
                           close_prices, volumes=None, high_prices=None, low_prices=None,
-                          stock_code=None) -> float:
+                          stock_code=None, long: bool = False) -> float:
         """XGBoost 모델을 사용한 예측"""
         try:
             price_change_1d = 0.0
@@ -571,8 +751,10 @@ class PredictionService:
 
             features = [features_dict.get(col, 0) for col in self.feature_columns]
             X = pd.DataFrame([features], columns=self.feature_columns)
-            X_scaled = self.xgb_scaler.transform(X)
-            predicted = self.xgb_model.predict(X_scaled)[0]
+            xgb_model = self.xgb_model_long if long else self.xgb_model
+            xgb_scaler = self.xgb_scaler_long if long else self.xgb_scaler
+            X_scaled = xgb_scaler.transform(X)
+            predicted = xgb_model.predict(X_scaled)[0]
 
             if predicted <= 0 or predicted > current_price * 2:
                 logger.warning(f"Abnormal XGBoost prediction: {predicted:.2f}, adjusting")
@@ -584,8 +766,10 @@ class PredictionService:
             logger.error(f"XGBoost prediction failed: {e}")
             return float(current_price)
 
-    def _predict_with_lstm(self, chart_data: List[Dict], stock_code: str = None) -> Optional[float]:
-        """LSTM 모델을 사용한 예측 (시계열 윈도우)"""
+    def _predict_with_lstm(self, chart_data: List[Dict], stock_code: str = None, long: bool = False) -> Optional[float]:
+        """LSTM 모델을 사용한 예측 (시계열 윈도우)
+        long=True 이면 장기(20d) 모델 사용.
+        """
         try:
             if len(chart_data) < LSTM_WINDOW_SIZE:
                 logger.warning(f"Insufficient data for LSTM: need {LSTM_WINDOW_SIZE}, got {len(chart_data)}")
@@ -601,17 +785,22 @@ class PredictionService:
             # 최근 LSTM_WINDOW_SIZE 일 피처
             recent_features = features_df.tail(LSTM_WINDOW_SIZE).values
 
+            # 모델 / 스케일러 선택
+            lstm_model = self.lstm_model_long if long else self.lstm_model
+            feature_scaler = self.lstm_feature_scaler_long if long else self.lstm_feature_scaler
+            target_scaler = self.lstm_target_scaler_long if long else self.lstm_target_scaler
+
             # 스케일링
-            scaled = self.lstm_feature_scaler.transform(recent_features)
+            scaled = feature_scaler.transform(recent_features)
 
             # (1, window, features) 텐서
             X_input = scaled.reshape(1, LSTM_WINDOW_SIZE, -1)
 
             # 예측 (스케일된 값)
-            pred_scaled = self.lstm_model.predict(X_input, verbose=0)[0][0]
+            pred_scaled = lstm_model.predict(X_input, verbose=0)[0][0]
 
             # 역변환
-            predicted = self.lstm_target_scaler.inverse_transform(
+            predicted = target_scaler.inverse_transform(
                 np.array([[pred_scaled]])
             )[0][0]
 
@@ -1096,7 +1285,9 @@ class PredictionService:
             "stock_name": stock_name,
             "current_price": 0,
             "predicted_price": 0.0,
-            "prediction_date": (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"),
+            "prediction_date": (lambda d: d.strftime("%Y-%m-%d"))(
+                next(d for d in (datetime.now() + timedelta(days=i) for i in range(1, 5)) if d.weekday() < 5)
+            ),
             "confidence": 0.3,
             "trend": "보합",
             "recommendation": "보유",
