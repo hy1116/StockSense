@@ -100,7 +100,7 @@ def evaluate():
                 SELECT id, stock_code, prediction_date, predicted_price, current_price
                 FROM predictions
                 WHERE is_evaluated = false
-                  AND prediction_date < :today
+                  AND prediction_date <= :today
                 ORDER BY prediction_date
             """),
             {"today": today_str}
