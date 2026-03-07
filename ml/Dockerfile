@@ -9,7 +9,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --prefix=/install -r requirements.txt
+# google-generativeai는 백엔드 전용 (ML 파이프라인 불필요), protobuf 충돌 방지를 위해 제외
+RUN grep -v "google-generativeai" requirements.txt > requirements-ml.txt && \
+    pip install --prefix=/install -r requirements-ml.txt
 
 FROM python:3.11-slim
 WORKDIR /app

@@ -63,6 +63,9 @@ spec:
       - - name: training
           template: run-task
           arguments: { parameters: [{name: cmd, value: "python -m ml.daily_train_batch"}] }
+      - - name: batch-predict
+          template: run-task
+          arguments: { parameters: [{name: cmd, value: "python -m ml.batch_predict"}] }
 
     - name: run-task
       inputs:

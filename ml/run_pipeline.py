@@ -57,6 +57,7 @@ def main():
     run_step("4. 뉴스 크롤링 및 감성분석", "crawl_news.py", ["--hours", "0"])
     run_step("5. 데이터 전처리", "preprocess_data.py")
     run_step("6. 모델 학습 (XGBoost + LSTM)", "daily_train_batch.py")
+    run_step("7. 배치 예측 생성", "batch_predict.py")
 
     elapsed = datetime.now() - start
     logger.info(f"=== ML Pipeline completed in {elapsed} ===")
