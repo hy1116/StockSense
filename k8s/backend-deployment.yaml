@@ -71,10 +71,9 @@ spec:
               key: KAFKA_BOOTSTRAP_SERVERS
         - name: ANTHROPIC_API_KEY
           valueFrom:
-            secretKeyRef:
-              name: stocksense-secret
+            configMapKeyRef:
+              name: stocksense-config
               key: ANTHROPIC_API_KEY
-              optional: true
         volumeMounts:
         # models-storage: DB 로드 실패 시 fallback 전용 (emptyDir → 재시작 시 DB에서 재로드)
         - name: models-storage
