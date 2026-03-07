@@ -72,27 +72,34 @@ def _build_prompt(stock_name: str, prediction: Dict) -> str:
 
 
 async def generate_stock_opinion(stock_name: str, prediction: Dict) -> Optional[str]:
-    """Claude API로 종목 투자의견 생성 (async)"""
+    """Gemini API로 종목 투자의견 생성 (async)"""
     try:
         from app.config import get_settings
         settings = get_settings()
 
-        if not settings.anthropic_api_key:
-            logger.warning("ANTHROPIC_API_KEY 미설정 — AI 의견 생성 불가")
+        if not settings.gemini_api_key:
+            logger.warning("GEMINI_API_KEY 미설정 — AI 의견 생성 불가")
             return None
 
-        import anthropic
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        import asyncio
+        import google.generativeai as genai
+
+        genai.configure(api_key=settings.gemini_api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
 
         prompt = _build_prompt(stock_name, prediction)
 
-        message = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt}],
+        # google-generativeai는 sync라서 executor로 실행
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: model.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(max_output_tokens=300, temperature=0.7),
+            )
         )
 
-        opinion = message.content[0].text.strip()
+        opinion = response.text.strip()
         logger.info(f"AI 의견 생성 완료: {stock_name} ({len(opinion)}자)")
         return opinion
 

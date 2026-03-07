@@ -11,5 +11,5 @@ data:
   POSTGRES_USER: "postgres"
   # k8s 내부에서 Kafka 접근 주소 (ClusterIP Service 이름)
   KAFKA_BOOTSTRAP_SERVERS: "kafka-service:9092"
-  # Anthropic Claude API Key
-  ANTHROPIC_API_KEY: ""
+  # Google Gemini API Key
+  GEMINI_API_KEY: ""

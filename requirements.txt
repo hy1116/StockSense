@@ -113,4 +113,4 @@ wrapt==2.0.1
 yfinance==0.2.50
 xgboost>=2.0.0
 finance-datareader>=0.9.50
-anthropic>=0.40.0
+google-generativeai>=0.8.0

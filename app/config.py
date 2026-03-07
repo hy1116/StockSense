@@ -14,8 +14,8 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
-    # Anthropic Claude API
-    anthropic_api_key: str = ""
+    # Google Gemini API
+    gemini_api_key: str = ""
 
     # Stock API Keys (optional)
     alpha_vantage_api_key: str = ""
