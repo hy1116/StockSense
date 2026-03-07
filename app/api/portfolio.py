@@ -795,7 +795,7 @@ async def get_fluctuation_stocks(
         for idx, item in enumerate(output[:limit], start=1):
             stock = TopStock(
                 rank=idx,
-                stock_code=item.get("mksc_shrn_iscd", ""),
+                stock_code=item.get("stck_shrn_iscd") or item.get("mksc_shrn_iscd", ""),
                 stock_name=item.get("hts_kor_isnm", ""),
                 current_price=int(item.get("stck_prpr", 0)),
                 change_rate=float(item.get("prdy_ctrt", 0)),
