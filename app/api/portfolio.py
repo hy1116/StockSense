@@ -223,6 +223,31 @@ async def get_stock_prediction_fresh(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/stock/{stock_code}/opinion")
+async def get_stock_ai_opinion(
+    stock_code: str,
+    client: KISAPIClient = Depends(get_kis_client),
+    predictor: PredictionService = Depends(get_prediction_service)
+):
+    """종목 AI 자연어 투자의견 (Claude 생성)"""
+    try:
+        from app.services.stock_opinion import generate_stock_opinion
+
+        price_result = await run_sync(client.get_stock_price, stock_code)
+        stock_name = price_result.get("output", {}).get("hts_kor_isnm", "")
+
+        chart_result = await run_sync(client.get_daily_chart, stock_code, period="D", count=100)
+        output2 = chart_result.get("output2", [])
+
+        pred_result = await run_sync(predictor.predict_price, stock_code, stock_name, output2)
+        opinion = await generate_stock_opinion(stock_name, pred_result)
+
+        return {"opinion": opinion, "stock_code": stock_code, "stock_name": stock_name}
+    except Exception as e:
+        logger.error(f"AI 의견 생성 실패 {stock_code}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/stock/{stock_code}/detail", response_model=StockDetailInfo)
 async def get_stock_detail(
     stock_code: str,

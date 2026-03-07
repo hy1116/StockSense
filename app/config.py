@@ -14,6 +14,9 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # Anthropic Claude API
+    anthropic_api_key: str = ""
+
     # Stock API Keys (optional)
     alpha_vantage_api_key: str = ""
     finnhub_api_key: str = ""

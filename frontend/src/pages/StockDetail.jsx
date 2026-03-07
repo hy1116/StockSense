@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { getStockDetail, getStockChart, getStockPrediction, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock, getPredictionAccuracy, checkWatchlist, addToWatchlist, removeFromWatchlist } from '../services/api'
+import { getStockDetail, getStockChart, getStockPrediction, getStockAIOpinion, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock, getPredictionAccuracy, checkWatchlist, addToWatchlist, removeFromWatchlist } from '../services/api'
 import { createChart } from 'lightweight-charts'
 import './StockDetail.css'
 
@@ -41,6 +41,10 @@ function StockDetail() {
   // AI 예측 상태 (별도 로딩)
   const [prediction, setPrediction] = useState(null)
   const [predictionLoading, setPredictionLoading] = useState(true)
+
+  // AI 자연어 의견 상태 (예측과 별도 로딩)
+  const [aiOpinion, setAiOpinion] = useState(null)
+  const [aiOpinionLoading, setAiOpinionLoading] = useState(true)
 
   // AI 예측 상세 드롭다운
   const [showPredDetails, setShowPredDetails] = useState(true)
@@ -135,6 +139,20 @@ function StockDetail() {
       console.error('Error fetching prediction:', err)
     } finally {
       setPredictionLoading(false)
+    }
+  }
+
+  // AI 자연어 의견 조회 (예측과 별도)
+  const fetchAIOpinion = async () => {
+    setAiOpinionLoading(true)
+    try {
+      const data = await getStockAIOpinion(symbol)
+      setAiOpinion(data?.opinion || null)
+    } catch (err) {
+      console.error('Error fetching AI opinion:', err)
+      setAiOpinion(null)
+    } finally {
+      setAiOpinionLoading(false)
     }
   }
 
@@ -556,6 +574,7 @@ function StockDetail() {
     fetchStockDetail(true)
     fetchChartData()
     fetchPrediction()
+    fetchAIOpinion()
 
     if (isMarketOpen() && period === '1D') {
       autoRefreshIntervalRef.current = setInterval(() => {
@@ -762,40 +781,21 @@ function StockDetail() {
                 </div>
               )
             })()}
-            {/* ML 한줄 의견 */}
-            {prediction.details && prediction.details.model_used !== 'rule_based' && (() => {
-              const rf = prediction.details.recommendation_factors
-              const ti = prediction.details.technical_indicators
-              const modelLabel = prediction.details.model_used === 'ensemble' ? 'XGBoost+LSTM 앙상블' : prediction.details.model_used === 'xgboost' ? 'XGBoost' : 'LSTM'
-              const trendText = prediction.trend
-              const rec = prediction.recommendation
-              const conf = Math.round(prediction.confidence * 100)
-              let reason = ''
-              if (rf) {
-                const scores = [
-                  { label: '추세', v: rf.trend_score },
-                  { label: 'RSI', v: rf.rsi_score },
-                  { label: 'MACD', v: rf.macd_score },
-                  { label: '볼린저밴드', v: rf.bb_score },
-                ]
-                const topPos = scores.filter(s => s.v > 0).sort((a, b) => b.v - a.v)[0]
-                const topNeg = scores.filter(s => s.v < 0).sort((a, b) => a.v - b.v)[0]
-                if (rec === '적극 매수' || rec === '매수') {
-                  reason = topPos ? `${topPos.label} 지표가 긍정적이며` : '기술적 지표 종합 결과'
-                } else if (rec === '적극 매도' || rec === '매도') {
-                  reason = topNeg ? `${topNeg.label} 지표가 부정적이며` : '기술적 지표 종합 결과'
-                } else {
-                  reason = '기술적 지표가 혼재하여'
-                }
-              }
-              const opinion = `${modelLabel} 모델 분석 결과, ${reason} ${trendText} 추세로 "${rec}" 의견입니다. (신뢰도 ${conf}%)`
-              return (
-                <div className="sd-ml-opinion">
-                  <span className="sd-ml-opinion-icon">🤖</span>
-                  <span className="sd-ml-opinion-text">{opinion}</span>
-                </div>
-              )
-            })()}
+            {/* AI 자연어 의견 */}
+            <div className="sd-ml-opinion">
+              <span className="sd-ml-opinion-icon">🤖</span>
+              {aiOpinionLoading ? (
+                <span className="sd-ml-opinion-loading">AI가 분석 중입니다...</span>
+              ) : aiOpinion ? (
+                <span className="sd-ml-opinion-text">{aiOpinion}</span>
+              ) : (
+                <span className="sd-ml-opinion-text sd-ml-opinion-fallback">
+                  {prediction.details?.model_used === 'ensemble' ? 'XGBoost+LSTM 앙상블' :
+                   prediction.details?.model_used === 'xgboost' ? 'XGBoost' :
+                   prediction.details?.model_used === 'lstm' ? 'LSTM' : '규칙 기반'} 모델 분석 기준 {prediction.trend} 추세, {prediction.recommendation} 의견 (신뢰도 {Math.round(prediction.confidence * 100)}%)
+                </span>
+              )}
+            </div>
             <div className="sd-pred-badges">
               <div className="sd-pred-badge-item">
                 <span className="sd-pred-badge-label">추세</span>

@@ -380,7 +380,9 @@
   color: var(--text-secondary);
 }
 .sd-ml-opinion-icon { font-size: 1rem; flex-shrink: 0; margin-top: 0.05rem; }
-.sd-ml-opinion-text { flex: 1; }
+.sd-ml-opinion-text { flex: 1; white-space: pre-wrap; }
+.sd-ml-opinion-loading { flex: 1; opacity: 0.5; animation: sd-pulse 1.5s ease-in-out infinite; }
+.sd-ml-opinion-fallback { flex: 1; opacity: 0.7; }
 
 .sd-pred-hero {
   display: flex;
