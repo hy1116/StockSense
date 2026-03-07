@@ -121,8 +121,9 @@ class DataPreprocessor:
         df["target_return"] = (df["target_price"] / df["close"]) - 1
         df["target_direction"] = (df["target_return"] > 0).astype(int)
 
-        # 장기: 20거래일 후 종가 (≈ 1개월)
+        # 장기: 20거래일 후 종가 (≈ 1개월) + 수익률
         df["target_price_20d"] = df["close"].shift(-20)
+        df["target_return_20d"] = (df["target_price_20d"] / df["close"]) - 1
 
         return df
 

@@ -611,7 +611,8 @@ class PredictionService:
 
         # LSTM 예측
         if lstm_model is not None and chart_data is not None:
-            lstm_pred = self._predict_with_lstm(chart_data, stock_code=stock_code, long=long)
+            lstm_pred = self._predict_with_lstm(chart_data, stock_code=stock_code, long=long,
+                                                current_price=current_price)
             if lstm_pred is not None:
                 logger.info(f"[LSTM{'_long' if long else ''}] prediction: {lstm_pred:.2f}")
 
@@ -766,9 +767,11 @@ class PredictionService:
             logger.error(f"XGBoost prediction failed: {e}")
             return float(current_price)
 
-    def _predict_with_lstm(self, chart_data: List[Dict], stock_code: str = None, long: bool = False) -> Optional[float]:
+    def _predict_with_lstm(self, chart_data: List[Dict], stock_code: str = None,
+                           long: bool = False, current_price: float = None) -> Optional[float]:
         """LSTM 모델을 사용한 예측 (시계열 윈도우)
         long=True 이면 장기(20d) 모델 사용.
+        target_scaler가 StandardScaler이면 수익률로 예측 → current_price로 환산.
         """
         try:
             if len(chart_data) < LSTM_WINDOW_SIZE:
@@ -800,9 +803,21 @@ class PredictionService:
             pred_scaled = lstm_model.predict(X_input, verbose=0)[0][0]
 
             # 역변환
-            predicted = target_scaler.inverse_transform(
+            pred_raw = target_scaler.inverse_transform(
                 np.array([[pred_scaled]])
             )[0][0]
+
+            # 수익률 기반 모델이면 (StandardScaler 사용) 가격으로 환산
+            from sklearn.preprocessing import StandardScaler
+            if isinstance(target_scaler, StandardScaler):
+                if current_price and current_price > 0:
+                    predicted = float(current_price) * (1.0 + pred_raw)
+                    logger.info(f"[LSTM return] return={pred_raw:.4f} → price={predicted:.2f}")
+                else:
+                    logger.warning("LSTM return 모델인데 current_price 없음 — 예측 불가")
+                    return None
+            else:
+                predicted = pred_raw
 
             if predicted <= 0:
                 logger.warning(f"Abnormal LSTM prediction: {predicted:.2f}")

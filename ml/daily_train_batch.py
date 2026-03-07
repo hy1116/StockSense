@@ -231,41 +231,63 @@ class DailyModelTrainer:
 
         logger.info(f"[LSTM] LSTM 학습 시작 (window_size={window_size})...")
 
-        # 피처/타겟 스케일링
+        # 피처 스케일링 (전체 기준)
         feature_scaler = MinMaxScaler()
-        target_scaler = MinMaxScaler()
-
         X_scaled = feature_scaler.fit_transform(X)
-        y_scaled = target_scaler.fit_transform(y.values.reshape(-1, 1)).flatten()
 
-        # 슬라이딩 윈도우로 시퀀스 생성 (종목 경계 보호)
-        X_seq_list, y_seq_list = [], []
+        # 타겟 스케일링: 수익률(return) → StandardScaler, 절대가격 → MinMaxScaler
+        from sklearn.preprocessing import StandardScaler
+        y_vals = y.values
+        is_return_target = (np.abs(y_vals) < 1).mean() > 0.95  # 대부분 -1~1 범위면 수익률로 판단
+        target_scaler = StandardScaler() if is_return_target else MinMaxScaler()
+        y_scaled = target_scaler.fit_transform(y_vals.reshape(-1, 1)).flatten()
+
+        logger.info(f"[LSTM] 타겟 유형: {'수익률(return)' if is_return_target else '절대가격(price)'}")
+
+        # 종목별 시계열 분할 + 시퀀스 생성
+        # 각 종목의 마지막 20%를 테스트셋으로 사용 → 종목 분포 편향 방지
+        X_train_list, y_train_list = [], []
+        X_test_list, y_test_list = [], []
+
         if df is not None and 'stock_code' in df.columns:
-            # stock_code별로 독립 시퀀스 생성 (종목 경계 넘지 않도록)
             for _, group in df.groupby('stock_code'):
-                pos_idx = group.index.tolist()  # 0..N-1 positional
-                if len(pos_idx) < window_size + 5:
+                pos_idx = group.index.tolist()
+                if len(pos_idx) < window_size + 10:
                     continue
                 X_s = X_scaled[pos_idx]
                 y_s = y_scaled[pos_idx]
+
+                # 종목 내 시계열 분할 (각 종목 마지막 20% = 테스트)
+                stock_split = int(len(X_s) * 0.8)
+
+                seqs_x, seqs_y = [], []
                 for i in range(window_size, len(X_s)):
-                    X_seq_list.append(X_s[i - window_size:i])
-                    y_seq_list.append(y_s[i])
-            logger.info(f"[LSTM] 종목별 시퀀스 생성: {len(X_seq_list)}개 (경계 보호 적용)")
+                    seqs_x.append(X_s[i - window_size:i])
+                    seqs_y.append(y_s[i])
+
+                # 시퀀스 기준으로도 80/20 분할
+                seq_split = int(len(seqs_x) * 0.8)
+                X_train_list.extend(seqs_x[:seq_split])
+                y_train_list.extend(seqs_y[:seq_split])
+                X_test_list.extend(seqs_x[seq_split:])
+                y_test_list.extend(seqs_y[seq_split:])
+
+            logger.info(f"[LSTM] 종목별 시계열 분할: Train={len(X_train_list)}, Test={len(X_test_list)}")
         else:
-            # fallback: 기존 방식 (stock_code 없을 때)
+            logger.warning("[LSTM] stock_code 없음 — 전체 배열 기준 분할 (fallback)")
             for i in range(window_size, len(X_scaled)):
-                X_seq_list.append(X_scaled[i - window_size:i])
-                y_seq_list.append(y_scaled[i])
-            logger.warning("[LSTM] stock_code 없음 — 종목 경계 미보호로 시퀀스 생성")
+                X_train_list.append(X_scaled[i - window_size:i])
+                y_train_list.append(y_scaled[i])
+            split_idx = int(len(X_train_list) * 0.8)
+            X_test_list = X_train_list[split_idx:]
+            y_test_list = y_train_list[split_idx:]
+            X_train_list = X_train_list[:split_idx]
+            y_train_list = y_train_list[:split_idx]
 
-        X_seq = np.array(X_seq_list)
-        y_seq = np.array(y_seq_list)
-
-        # 시계열 기반 분할 (shuffle=False)
-        split_idx = int(len(X_seq) * 0.8)
-        X_train, X_test = X_seq[:split_idx], X_seq[split_idx:]
-        y_train, y_test = y_seq[:split_idx], y_seq[split_idx:]
+        X_train = np.array(X_train_list)
+        y_train = np.array(y_train_list)
+        X_test = np.array(X_test_list)
+        y_test = np.array(y_test_list)
 
         logger.info(f"[LSTM] 데이터 분할: Train={len(X_train)}, Test={len(X_test)}")
         logger.info(f"[LSTM] 입력 형태: {X_train.shape}")  # (samples, window, features)
@@ -651,13 +673,22 @@ class DailyModelTrainer:
                 # 2. 피처 준비 (해당 horizon 타겟 기준으로 NaN 제거)
                 X, y, df_h = self.prepare_features(df, target_col=target_col)
 
+                # LSTM은 수익률 타겟 사용 (종목 간 가격 스케일 차이 제거)
+                lstm_target_col = 'target_return' if horizon_days == 1 else 'target_return_20d'
+                if lstm_target_col in df_h.columns:
+                    y_lstm = df_h[lstm_target_col]
+                    logger.info(f"[LSTM_{horizon_days}d] 수익률 타겟 사용: {lstm_target_col}")
+                else:
+                    y_lstm = y  # fallback
+                    logger.warning(f"[LSTM_{horizon_days}d] {lstm_target_col} 없음 — 절대가격 타겟 사용")
+
                 # === XGBoost 학습 ===
                 logger.info(f"[XGBoost_{horizon_days}d] 학습 시작")
                 xgb_results = self.train_xgboost(X, y)
 
                 # === LSTM 학습 ===
                 logger.info(f"[LSTM_{horizon_days}d] 학습 시작")
-                lstm_results = self.train_lstm(X, y, df=df_h)
+                lstm_results = self.train_lstm(X, y_lstm, df=df_h)
 
                 # === 앙상블 가중치 학습 ===
                 learned_weights = None
