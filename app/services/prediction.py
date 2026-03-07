@@ -289,7 +289,7 @@ class PredictionService:
                 os.remove(tmp_path)
 
     def _get_default_feature_columns(self) -> list:
-        """기본 피처 컬럼 반환 (29개: 기술적+뉴스+재무)"""
+        """기본 피처 컬럼 반환 (35개: 기술적+뉴스+재무+매크로)"""
         return [
             'open', 'high', 'low', 'close', 'volume',
             'ma5', 'ma10', 'ma20', 'rsi',
@@ -299,8 +299,56 @@ class PredictionService:
             'volume_ratio', 'obv_normalized', 'mfi',
             'news_sentiment_avg', 'news_count',
             'news_positive_ratio', 'news_negative_ratio',
-            'per', 'pbr', 'eps_normalized', 'div_yield', 'roe'
+            'per', 'pbr', 'eps_normalized', 'div_yield', 'roe',
+            'kospi_return', 'kosdaq_return', 'usdkrw_change',
+            'wti_return', 'sp500_return', 'vix',
         ]
+
+    def _get_macro_features(self) -> dict:
+        """최신 글로벌 매크로 지표 조회 (yfinance, 15분 인스턴스 캐시)"""
+        import time
+        now = time.time()
+        cache = getattr(self, '_macro_cache', None)
+        cache_ts = getattr(self, '_macro_cache_ts', 0)
+
+        if cache is not None and (now - cache_ts) < 900:
+            return cache
+
+        defaults = {
+            'kospi_return': 0.0, 'kosdaq_return': 0.0, 'usdkrw_change': 0.0,
+            'wti_return': 0.0, 'sp500_return': 0.0, 'vix': 20.0,
+        }
+        try:
+            import yfinance as yf
+            symbols = {
+                'kospi_return': '^KS11', 'kosdaq_return': '^KQ11',
+                'usdkrw_change': 'KRW=X', 'wti_return': 'CL=F',
+                'sp500_return': '^GSPC', 'vix': '^VIX',
+            }
+            result = {}
+            tickers = yf.Tickers(" ".join(symbols.values()))
+            for feat, sym in symbols.items():
+                try:
+                    info = tickers.tickers[sym].fast_info
+                    price = info.last_price
+                    prev = info.previous_close
+                    if feat == 'vix':
+                        result[feat] = float(price) if price else 20.0
+                    elif price and prev and prev != 0:
+                        result[feat] = float((price - prev) / prev)
+                    else:
+                        result[feat] = 0.0
+                except Exception:
+                    result[feat] = defaults[feat]
+
+            self._macro_cache = result
+            self._macro_cache_ts = now
+            logger.debug(f"매크로 피처 갱신: {result}")
+            return result
+
+        except Exception as e:
+            logger.warning(f"매크로 피처 조회 실패 (기본값 사용): {e}")
+            return defaults
 
     def _load_ml_model_from_file(self):
         """파일에서 ML 모델 로드 (DB 실패 시 fallback)"""
@@ -721,6 +769,8 @@ class PredictionService:
             }
             eps_normalized = (fin['eps'] / current_price) if current_price > 0 and fin['eps'] else 0.0
 
+            macro = self._get_macro_features()
+
             features_dict = {
                 'open': open_price,
                 'high': high_price,
@@ -748,6 +798,7 @@ class PredictionService:
                 'eps_normalized': eps_normalized,
                 'div_yield': fin['div_yield'],
                 'roe': fin['roe'],
+                **macro,
             }
 
             features = [features_dict.get(col, 0) for col in self.feature_columns]

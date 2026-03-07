@@ -73,7 +73,7 @@ class DailyModelTrainer:
         self.engine = create_engine(db_url)
         self.Session = sessionmaker(bind=self.engine)
 
-        # 피처 컬럼 정의 (24개 기술적+뉴스 + 5개 재무 = 29개)
+        # 피처 컬럼 정의 (24개 기술적+뉴스 + 5개 재무 + 6개 매크로 = 35개)
         self.feature_columns = [
             'open', 'high', 'low', 'close', 'volume',
             'ma5', 'ma10', 'ma20', 'rsi',
@@ -83,7 +83,10 @@ class DailyModelTrainer:
             'volume_ratio', 'obv_normalized', 'mfi',
             'news_sentiment_avg', 'news_count',
             'news_positive_ratio', 'news_negative_ratio',
-            'per', 'pbr', 'eps_normalized', 'div_yield', 'roe'
+            'per', 'pbr', 'eps_normalized', 'div_yield', 'roe',
+            # 글로벌 매크로 지표 (6개)
+            'kospi_return', 'kosdaq_return', 'usdkrw_change',
+            'wti_return', 'sp500_return', 'vix',
         ]
 
         # XGBoost 하이퍼파라미터

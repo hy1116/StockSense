@@ -16,6 +16,16 @@ if sys.platform == "win32":
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
+MACRO_SYMBOLS = {
+    "kospi_return":   "^KS11",
+    "kosdaq_return":  "^KQ11",
+    "usdkrw_change":  "KRW=X",
+    "wti_return":     "CL=F",
+    "sp500_return":   "^GSPC",
+    "vix":            "^VIX",
+}
+
+
 class DataPreprocessor:
     """데이터 전처리 및 피처 엔지니어링"""
 
@@ -27,6 +37,96 @@ class DataPreprocessor:
 
         self.processed_dir.mkdir(parents=True, exist_ok=True)
         self.datasets_dir.mkdir(parents=True, exist_ok=True)
+
+        self._macro_cache: Optional[pd.DataFrame] = None
+
+    def load_macro_data(self, start_date: str = "2018-01-01") -> pd.DataFrame:
+        """yfinance로 글로벌 매크로 지표 다운로드 (파이프라인 실행당 1회 캐시)"""
+        if self._macro_cache is not None:
+            return self._macro_cache
+
+        cache_path = self.data_dir / "raw" / "macro_data.csv"
+
+        try:
+            import yfinance as yf
+            end_date = datetime.today().strftime("%Y-%m-%d")
+            symbols = list(MACRO_SYMBOLS.values())
+            print(f"   Downloading macro data: {symbols}")
+
+            raw = yf.download(symbols, start=start_date, end=end_date,
+                              auto_adjust=True, progress=False)
+
+            # MultiIndex → 종목별 Close 추출
+            if isinstance(raw.columns, pd.MultiIndex):
+                close = raw["Close"]
+            else:
+                close = raw[["Close"]]
+                close.columns = symbols
+
+            close.index = pd.to_datetime(close.index)
+            close = close.ffill()
+
+            df_macro = pd.DataFrame({"date": close.index})
+            df_macro["date"] = pd.to_datetime(df_macro["date"]).dt.tz_localize(None)
+
+            for feat, sym in MACRO_SYMBOLS.items():
+                if sym not in close.columns:
+                    df_macro[feat] = 0.0
+                    continue
+                if feat == "vix":
+                    df_macro[feat] = close[sym].values
+                else:
+                    df_macro[feat] = close[sym].pct_change().values
+
+            df_macro = df_macro.fillna(0.0).reset_index(drop=True)
+            df_macro.to_csv(cache_path, index=False, encoding="utf-8-sig")
+            print(f"   Macro data: {len(df_macro)} trading days → saved to {cache_path.name}")
+            self._macro_cache = df_macro
+            return df_macro
+
+        except Exception as e:
+            print(f"   ⚠️ Failed to download macro data: {e}")
+            # 캐시 파일이 있으면 fallback
+            if cache_path.exists():
+                print(f"   Using cached macro data from {cache_path.name}")
+                df = pd.read_csv(cache_path)
+                df["date"] = pd.to_datetime(df["date"])
+                self._macro_cache = df
+                return df
+            # 없으면 빈 DataFrame (컬럼은 0으로 채워짐)
+            return pd.DataFrame(columns=["date"] + list(MACRO_SYMBOLS.keys()))
+
+    def merge_macro_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """매크로 피처를 주가 DataFrame에 날짜 기준으로 병합 (backward fill)"""
+        macro_cols = list(MACRO_SYMBOLS.keys())
+
+        # 컬럼 초기화 (매크로 데이터 없어도 컬럼 존재 보장)
+        for col in macro_cols:
+            df[col] = 0.0
+
+        macro_df = self.load_macro_data()
+        if macro_df.empty:
+            return df
+
+        # merge_asof: 주가 날짜에 가장 가까운 이전 매크로 날짜 사용 (look-ahead bias 없음)
+        df_sorted = df.copy()
+        df_sorted["date"] = pd.to_datetime(df_sorted["date"])
+        macro_df["date"] = pd.to_datetime(macro_df["date"])
+
+        merged = pd.merge_asof(
+            df_sorted.sort_values("date"),
+            macro_df[["date"] + macro_cols].sort_values("date"),
+            on="date",
+            direction="backward",
+        )
+
+        for col in macro_cols:
+            if col in merged.columns:
+                df[col] = merged[col].fillna(0.0).values
+
+        merged_count = (df["vix"] != 0).sum()
+        print(f"   Merged macro features: {merged_count} days with data")
+        return df
 
     def load_stock_data(self, stock_code: str) -> pd.DataFrame:
         """CSV 파일에서 주가 데이터 로드"""
@@ -310,6 +410,10 @@ class DataPreprocessor:
         # 3b. 재무 피처 병합
         df = self.merge_financial_features(df, stock_code)
         print(f"   Merged financial features")
+
+        # 3c. 글로벌 매크로 피처 병합
+        df = self.merge_macro_features(df)
+        print(f"   Merged macro features")
 
         # 4. 타겟 생성
         df = self.create_target(df, days_ahead=1)
