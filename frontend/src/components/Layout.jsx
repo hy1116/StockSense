@@ -1,5 +1,6 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import MarketTicker from './MarketTicker'
 import './Layout.css'
 
 function Layout() {
@@ -37,6 +38,7 @@ function Layout() {
           </div>
         </div>
       </header>
+      <MarketTicker />
       <main className="main-content">
         <Outlet />
       </main>

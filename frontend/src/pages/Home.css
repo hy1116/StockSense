@@ -2,6 +2,59 @@
    Home — 증권앱 스타일 (StockDetail 통일)
    =================================================== */
 
+/* ===== Macro Indicators ===== */
+.macro-section {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.macro-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.macro-label {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+.macro-price {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.3px;
+}
+
+.macro-change {
+  font-size: 0.74rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.macro-change.up   { color: #f87171; }
+.macro-change.down { color: #60a5fa; }
+.macro-change.flat { color: rgba(255, 255, 255, 0.3); }
+
+@media (max-width: 768px) {
+  .macro-section { grid-template-columns: repeat(4, 1fr); gap: 0.45rem; }
+  .macro-card { padding: 0.6rem 0.65rem; }
+  .macro-price { font-size: 0.82rem; }
+}
+
+@media (max-width: 480px) {
+  .macro-section { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ===== Base Layout ===== */
 .home {
   max-width: 960px;
@@ -843,4 +896,11 @@
   .price-down {
     color: #2563eb !important;
   }
+
+  .macro-card { background: rgba(0, 0, 0, 0.03); border-color: #e5e7eb; }
+  .macro-label { color: rgba(17, 24, 39, 0.45); }
+  .macro-price { color: #111827; }
+  .macro-change.flat { color: rgba(17, 24, 39, 0.35); }
+  .macro-change.up   { color: #dc2626; }
+  .macro-change.down { color: #2563eb; }
 }

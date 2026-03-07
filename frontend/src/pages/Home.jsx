@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { getHealthCheck, getTopStocks, getMarketCapStocks, getFluctuationStocks, getPortfolio, searchStocks, getWatchlist } from '../services/api'
+import { getHealthCheck, getTopStocks, getMarketCapStocks, getFluctuationStocks, getPortfolio, searchStocks, getWatchlist, getMarketMacro } from '../services/api'
 import './Home.css'
 
 function Home() {
@@ -64,6 +64,13 @@ function Home() {
     queryFn: getWatchlist,
     refetchInterval: 60000,
     enabled: isLoggedIn && activeTab === 'watchlist',
+  })
+
+  const { data: macroData } = useQuery({
+    queryKey: ['marketMacro'],
+    queryFn: getMarketMacro,
+    refetchInterval: 60000,
+    staleTime: 60000,
   })
 
   // HTTP polling 잔고 조회 (30초 간격)
@@ -296,6 +303,31 @@ function Home() {
           )}
         </div>
       </section>
+
+      {/* 매크로 지표 카드 */}
+      {macroData && macroData.length > 0 && (
+        <section className="macro-section">
+          {macroData.filter(d => d.price !== null).map((item) => {
+            const up = item.change_pct > 0
+            const down = item.change_pct < 0
+            const formatPrice = () => {
+              const p = item.price
+              if (item.label === 'USD/KRW') return `${Math.round(p).toLocaleString('ko-KR')}원`
+              if (item.unit === '$') return `$${p.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`
+              return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            }
+            return (
+              <div key={item.symbol} className="macro-card">
+                <span className="macro-label">{item.label}</span>
+                <span className="macro-price">{formatPrice()}</span>
+                <span className={`macro-change ${up ? 'up' : down ? 'down' : 'flat'}`}>
+                  {up ? '▲' : down ? '▼' : ''}{Math.abs(item.change_pct).toFixed(2)}%
+                </span>
+              </div>
+            )
+          })}
+        </section>
+      )}
 
       {/* 상위 종목 섹션 - 탭 형태 */}
       <section className="ranking-section">

@@ -290,4 +290,9 @@ export const checkWatchlist = async (stockCode) => {
   return response.data
 }
 
+export const getMarketMacro = async () => {
+  const response = await api.get('/api/market/macro')
+  return response.data
+}
+
 export default api

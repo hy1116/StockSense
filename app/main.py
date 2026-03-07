@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
-from app.api import portfolio, prediction, auth, comment, ml_model, news, watchlist
+from app.api import portfolio, prediction, auth, comment, ml_model, news, watchlist, market
 from app.api import price_alert
 from app.database import init_db, close_db
 from app.config import get_settings
@@ -154,6 +154,7 @@ app.include_router(ml_model.router)
 app.include_router(news.router)
 app.include_router(watchlist.router)
 app.include_router(price_alert.router)  # 주가 알림
+app.include_router(market.router)       # 글로벌 매크로 지표
 
 
 @app.get("/")
