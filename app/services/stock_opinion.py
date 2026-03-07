@@ -85,7 +85,7 @@ async def generate_stock_opinion(stock_name: str, prediction: Dict) -> Optional[
         import google.generativeai as genai
 
         genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
 
         prompt = _build_prompt(stock_name, prediction)
 

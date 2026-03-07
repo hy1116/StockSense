@@ -1283,7 +1283,7 @@ class PredictionService:
                 WHERE stock_code = :stock_code
                     AND is_processed = true
                     AND sentiment_score IS NOT NULL
-                    AND published_at >= CURRENT_DATE
+                    AND published_at >= CURRENT_DATE - interval '3 days'
             """)
 
             with engine.connect() as conn:
