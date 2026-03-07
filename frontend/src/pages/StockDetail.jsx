@@ -44,7 +44,10 @@ function StockDetail() {
 
   // AI 자연어 의견 상태 (예측과 별도 로딩)
   const [aiOpinion, setAiOpinion] = useState(null)
-  const [aiOpinionLoading, setAiOpinionLoading] = useState(true)
+  const [aiOpinionLoading, setAiOpinionLoading] = useState(false)
+
+  // 단기/장기 예측 토글
+  const [predView, setPredView] = useState('short')
 
   // AI 예측 상세 드롭다운
   const [showPredDetails, setShowPredDetails] = useState(true)
@@ -574,7 +577,6 @@ function StockDetail() {
     fetchStockDetail(true)
     fetchChartData()
     fetchPrediction()
-    fetchAIOpinion()
 
     if (isMarketOpen() && period === '1D') {
       autoRefreshIntervalRef.current = setInterval(() => {
@@ -746,22 +748,43 @@ function StockDetail() {
           </div>
         ) : prediction ? (
         <div className="sd-prediction">
-            <div className="sd-pred-hero">
-              <div className="sd-pred-price-block">
-                <span className="sd-pred-label">단기 예측가 <small>(1거래일)</small></span>
-                <span className={`sd-pred-price${predictionChange !== null ? (predictionChange >= 0 ? ' price-up' : ' price-down') : ''}`}>{formatPrice(Math.round(prediction.predicted_price))}</span>
-                {predictionChange !== null && (
-                  <span className={`sd-pred-diff ${predictionChange >= 0 ? 'price-up' : 'price-down'}`}>
-                    {predictionChange >= 0 ? '+' : ''}{predictionChange.toFixed(2)}%
+            {/* 단기/장기 토글 탭 */}
+            {prediction.predicted_price_long != null && (
+              <div className="sd-pred-toggle">
+                <button
+                  className={`sd-pred-toggle-btn${predView === 'short' ? ' active' : ''}`}
+                  onClick={() => setPredView('short')}
+                >
+                  단기 <small>1거래일</small>
+                </button>
+                <button
+                  className={`sd-pred-toggle-btn${predView === 'long' ? ' active' : ''}`}
+                  onClick={() => setPredView('long')}
+                >
+                  장기 <small>약 1개월</small>
+                </button>
+              </div>
+            )}
+            {/* 예측가 블록 */}
+            {predView === 'short' ? (
+              <div className="sd-pred-hero">
+                <div className="sd-pred-price-block">
+                  <span className="sd-pred-label">단기 예측가 <small>(1거래일)</small></span>
+                  <span className={`sd-pred-price${predictionChange !== null ? (predictionChange >= 0 ? ' price-up' : ' price-down') : ''}`}>
+                    {formatPrice(Math.round(prediction.predicted_price))}
                   </span>
-                )}
+                  {predictionChange !== null && (
+                    <span className={`sd-pred-diff ${predictionChange >= 0 ? 'price-up' : 'price-down'}`}>
+                      {predictionChange >= 0 ? '+' : ''}{predictionChange.toFixed(2)}%
+                    </span>
+                  )}
+                </div>
+                <div className="sd-pred-date">
+                  <span className="sd-pred-label">예측일</span>
+                  <span>{prediction.prediction_date}</span>
+                </div>
               </div>
-              <div className="sd-pred-date">
-                <span className="sd-pred-label">예측일</span>
-                <span>{prediction.prediction_date}</span>
-              </div>
-            </div>
-            {prediction.predicted_price_long != null && (() => {
+            ) : prediction.predicted_price_long != null ? (() => {
               const longChange = (prediction.predicted_price_long - basic_info.current_price) / basic_info.current_price * 100
               return (
                 <div className="sd-pred-hero sd-pred-hero-long">
@@ -780,7 +803,7 @@ function StockDetail() {
                   </div>
                 </div>
               )
-            })()}
+            })() : null}
             {/* AI 자연어 의견 */}
             <div className="sd-ml-opinion">
               <span className="sd-ml-opinion-icon">🤖</span>
@@ -789,11 +812,12 @@ function StockDetail() {
               ) : aiOpinion ? (
                 <span className="sd-ml-opinion-text">{aiOpinion}</span>
               ) : (
-                <span className="sd-ml-opinion-text sd-ml-opinion-fallback">
-                  {prediction.details?.model_used === 'ensemble' ? 'XGBoost+LSTM 앙상블' :
-                   prediction.details?.model_used === 'xgboost' ? 'XGBoost' :
-                   prediction.details?.model_used === 'lstm' ? 'LSTM' : '규칙 기반'} 모델 분석 기준 {prediction.trend} 추세, {prediction.recommendation} 의견 (신뢰도 {Math.round(prediction.confidence * 100)}%)
-                </span>
+                <button
+                  className="sd-ml-opinion-btn"
+                  onClick={fetchAIOpinion}
+                >
+                  AI 의견 분석 요청
+                </button>
               )}
             </div>
             <div className="sd-pred-badges">

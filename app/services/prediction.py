@@ -18,6 +18,10 @@ from sqlalchemy.orm import sessionmaker
 
 logger = logging.getLogger(__name__)
 
+# 모듈 레벨 매크로 피처 캐시 (PredictionService는 요청마다 새 인스턴스 생성되므로)
+_MACRO_FEATURE_CACHE: dict | None = None
+_MACRO_FEATURE_CACHE_TS: float = 0
+
 # Sync DB 엔진 싱글턴 (매 요청마다 생성 방지)
 _sync_engine = None
 _sync_session_factory = None
@@ -305,50 +309,69 @@ class PredictionService:
         ]
 
     def _get_macro_features(self) -> dict:
-        """최신 글로벌 매크로 지표 조회 (yfinance, 15분 인스턴스 캐시)"""
+        """최신 글로벌 매크로 지표 조회 (모듈 레벨 캐시, 15분 유지)"""
         import time
-        now = time.time()
-        cache = getattr(self, '_macro_cache', None)
-        cache_ts = getattr(self, '_macro_cache_ts', 0)
+        import ast
+        import requests as _req
+        from datetime import datetime, timedelta
 
-        if cache is not None and (now - cache_ts) < 900:
-            return cache
+        now = time.time()
+        global _MACRO_FEATURE_CACHE, _MACRO_FEATURE_CACHE_TS
+        if _MACRO_FEATURE_CACHE is not None and (now - _MACRO_FEATURE_CACHE_TS) < 900:
+            return _MACRO_FEATURE_CACHE
 
         defaults = {
             'kospi_return': 0.0, 'kosdaq_return': 0.0, 'usdkrw_change': 0.0,
             'wti_return': 0.0, 'sp500_return': 0.0, 'vix': 20.0,
         }
-        try:
-            import yfinance as yf
-            symbols = {
-                'kospi_return': '^KS11', 'kosdaq_return': '^KQ11',
-                'usdkrw_change': 'KRW=X', 'wti_return': 'CL=F',
-                'sp500_return': '^GSPC', 'vix': '^VIX',
-            }
-            result = {}
-            tickers = yf.Tickers(" ".join(symbols.values()))
-            for feat, sym in symbols.items():
-                try:
-                    info = tickers.tickers[sym].fast_info
-                    price = info.last_price
-                    prev = info.previous_close
-                    if feat == 'vix':
-                        result[feat] = float(price) if price else 20.0
-                    elif price and prev and prev != 0:
-                        result[feat] = float((price - prev) / prev)
-                    else:
-                        result[feat] = 0.0
-                except Exception:
-                    result[feat] = defaults[feat]
 
-            self._macro_cache = result
-            self._macro_cache_ts = now
-            logger.debug(f"매크로 피처 갱신: {result}")
-            return result
+        def _naver_return(symbol: str) -> float:
+            end = datetime.today()
+            start = end - timedelta(days=10)
+            r = _req.get(
+                "https://fchart.stock.naver.com/siseJson.nhn",
+                params={"symbol": symbol, "requestType": "1",
+                        "startTime": start.strftime("%Y%m%d"),
+                        "endTime": end.strftime("%Y%m%d"), "timeframe": "day"},
+                headers={"Referer": "https://finance.naver.com/"},
+                timeout=5,
+            )
+            rows = ast.literal_eval(r.text.replace("null", "None").strip())
+            closes = [float(row[4]) for row in rows[1:] if row and row[4] and row[4] > 0]
+            if len(closes) >= 2 and closes[-2] != 0:
+                return (closes[-1] - closes[-2]) / closes[-2]
+            return 0.0
 
-        except Exception as e:
-            logger.warning(f"매크로 피처 조회 실패 (기본값 사용): {e}")
-            return defaults
+        def _yahoo_return_or_val(symbol: str, as_value: bool = False) -> float:
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=5d"
+            r = _req.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+            closes = r.json()["chart"]["result"][0]["indicators"]["quote"][0]["close"]
+            closes = [float(c) for c in closes if c is not None]
+            if as_value:
+                return closes[-1] if closes else 20.0
+            if len(closes) >= 2 and closes[-2] != 0:
+                return (closes[-1] - closes[-2]) / closes[-2]
+            return 0.0
+
+        result = dict(defaults)
+        fetchers = {
+            'kospi_return':   lambda: _naver_return('KOSPI'),
+            'kosdaq_return':  lambda: _naver_return('KOSDAQ'),
+            'usdkrw_change':  lambda: _yahoo_return_or_val('KRW=X'),
+            'wti_return':     lambda: _yahoo_return_or_val('CL=F'),
+            'sp500_return':   lambda: _yahoo_return_or_val('^GSPC'),
+            'vix':            lambda: _yahoo_return_or_val('^VIX', as_value=True),
+        }
+        for feat, fn in fetchers.items():
+            try:
+                result[feat] = fn()
+            except Exception:
+                result[feat] = defaults[feat]
+
+        _MACRO_FEATURE_CACHE = result
+        _MACRO_FEATURE_CACHE_TS = now
+        logger.debug(f"매크로 피처 갱신: {result}")
+        return result
 
     def _load_ml_model_from_file(self):
         """파일에서 ML 모델 로드 (DB 실패 시 fallback)"""

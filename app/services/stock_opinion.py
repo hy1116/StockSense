@@ -72,35 +72,60 @@ def _build_prompt(stock_name: str, prediction: Dict) -> str:
 
 
 async def generate_stock_opinion(stock_name: str, prediction: Dict) -> Optional[str]:
-    """Gemini API로 종목 투자의견 생성 (async)"""
-    try:
-        from app.config import get_settings
-        settings = get_settings()
+    """Gemini REST API로 종목 투자의견 생성 (async)
 
+    google.generativeai 라이브러리 대신 REST 직접 호출.
+    gemini-2.5-flash는 thinking 모델이라 thinkingBudget=0으로 비활성화해야 응답이 잘리지 않음.
+    """
+    try:
+        import asyncio
+        import httpx
+        from app.config import get_settings
+
+        settings = get_settings()
         if not settings.gemini_api_key:
             logger.warning("GEMINI_API_KEY 미설정 — AI 의견 생성 불가")
             return None
 
-        import asyncio
-        import google.generativeai as genai
-
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel("gemini-2.5-flash")
-
         prompt = _build_prompt(stock_name, prediction)
-
-        # google-generativeai는 sync라서 executor로 실행
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(max_output_tokens=300, temperature=0.7),
-            )
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"gemini-2.5-flash:generateContent?key={settings.gemini_api_key}"
         )
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "maxOutputTokens": 500,
+                "temperature": 0.7,
+                "thinkingConfig": {"thinkingBudget": 0},
+            },
+        }
 
-        opinion = response.text.strip()
-        logger.info(f"AI 의견 생성 완료: {stock_name} ({len(opinion)}자)")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # 429 Rate Limit 시 최대 3회 재시도 (5초 간격)
+            for attempt in range(3):
+                response = await client.post(url, json=payload)
+                if response.status_code != 429:
+                    break
+                if attempt < 2:
+                    logger.warning(f"Gemini 429 Rate Limit — {attempt+1}번째 재시도 대기 5초")
+                    await asyncio.sleep(5)
+            response.raise_for_status()
+
+        data = response.json()
+        candidate = data["candidates"][0]
+        finish_reason = candidate.get("finishReason", "UNKNOWN")
+        opinion = candidate["content"]["parts"][0]["text"].strip()
+
+        if finish_reason == "MAX_TOKENS":
+            logger.warning(f"AI 의견 토큰 한도 초과: {stock_name} — 마지막 완성 문장까지 트리밍")
+            for sep in (".", "!", "?"):
+                idx = opinion.rfind(sep)
+                if idx > len(opinion) // 2:
+                    opinion = opinion[: idx + 1]
+                    break
+
+        logger.info(f"AI 의견 생성 완료: {stock_name} ({len(opinion)}자, finish={finish_reason})")
         return opinion
 
     except Exception as e:

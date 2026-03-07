@@ -193,7 +193,9 @@ export const getPredictionAccuracy = async (stockCode, days = 30) => {
 // ===== Stock Detail API =====
 
 export const getStockDetail = async (symbol) => {
-  const response = await api.get(`/api/portfolio/stock/${symbol}/detail`)
+  const response = await api.get(`/api/portfolio/stock/${symbol}/detail`, {
+    timeout: 30000
+  })
   return response.data
 }
 

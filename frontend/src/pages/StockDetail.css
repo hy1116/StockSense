@@ -383,6 +383,57 @@
 .sd-ml-opinion-text { flex: 1; white-space: pre-wrap; }
 .sd-ml-opinion-loading { flex: 1; opacity: 0.5; animation: sd-pulse 1.5s ease-in-out infinite; }
 .sd-ml-opinion-fallback { flex: 1; opacity: 0.7; }
+.sd-ml-opinion-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: rgba(99, 179, 237, 0.7);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  letter-spacing: 0.1px;
+  transition: color 0.15s;
+}
+.sd-ml-opinion-btn:hover { color: rgba(99, 179, 237, 1); }
+
+/* 단기/장기 토글 */
+.sd-pred-toggle {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.sd-pred-toggle-btn {
+  padding: 0.3rem 0.9rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sd-pred-toggle-btn small {
+  font-size: 0.68rem;
+  opacity: 0.75;
+  margin-left: 0.2rem;
+}
+
+.sd-pred-toggle-btn:hover {
+  color: rgba(255, 255, 255, 0.75);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.sd-pred-toggle-btn.active {
+  background: rgba(100, 108, 255, 0.15);
+  border-color: rgba(100, 108, 255, 0.4);
+  color: #a5b4fc;
+  font-weight: 600;
+}
 
 .sd-pred-hero {
   display: flex;
@@ -395,15 +446,12 @@
 }
 
 .sd-pred-hero-long {
-  margin-top: 0.5rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  border-bottom: none;
-  opacity: 0.85;
+  padding: 0.25rem 0 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .sd-pred-hero-long .sd-pred-price {
-  font-size: 1.4rem;
+  font-size: 1.65rem;
 }
 
 .sd-pred-label small {
@@ -1811,6 +1859,17 @@
 
   .price-up { color: #dc2626 !important; }
   .price-down { color: #2563eb !important; }
+
+  .sd-pred-toggle-btn {
+    border-color: rgba(17, 24, 39, 0.12);
+    color: rgba(17, 24, 39, 0.45);
+  }
+  .sd-pred-toggle-btn:hover { color: rgba(17, 24, 39, 0.75); }
+  .sd-pred-toggle-btn.active {
+    background: rgba(79, 70, 229, 0.08);
+    border-color: rgba(79, 70, 229, 0.35);
+    color: #4f46e5;
+  }
 
   .sd-pred-hero {
     border-bottom-color: rgba(17, 24, 39, 0.08);
