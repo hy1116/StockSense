@@ -18,8 +18,7 @@ async def generate_stock_opinion(stock_name: str, **kwargs) -> Optional[str]:
             return None
 
         prompt = (
-            f"{stock_name} 주식에 대한 종합적인 투자 의견을 3~5문장으로 간결하게 말해줘. "
-            f"최근 사업 현황, 주요 리스크, 전망을 포함해서 균형 잡힌 시각으로 작성하고, "
+            f"{stock_name} 주식에 대해 단기/장기 관점으로 향후 주가 전망이 어떤지 10줄 이내로 분석해줘. "
             f"마지막 문장은 '※ 이 내용은 참고용이며 투자 권유가 아닙니다.' 로 끝내줘."
         )
 

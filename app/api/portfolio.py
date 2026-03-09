@@ -226,32 +226,23 @@ async def get_stock_prediction_fresh(
 @router.get("/stock/{stock_code}/opinion")
 async def get_stock_ai_opinion(
     stock_code: str,
-    name: str = Query(default="", description="종목명 (프론트에서 전달)"),
-    client: KISAPIClient = Depends(get_kis_client),
+    name: str = Query(..., description="종목명"),
 ):
     """종목 AI 전망 의견 (Gemini, Redis 1시간 캐시)"""
     try:
         from app.services.stock_opinion import generate_stock_opinion
 
-        # Redis 캐시 확인 (1시간)
         redis = get_redis_client()
-        cache_key = f"ai_opinion:{stock_code}"
+        cache_key = f"ai_opinion:{stock_code}:{name}"
         if redis.is_available():
             cached = redis.get(cache_key)
             if cached:
-                logger.info(f"AI 의견 캐시 HIT: {stock_code}")
+                logger.info(f"AI 의견 캐시 HIT: {stock_code} {name}")
                 return json.loads(cached)
 
-        # 프론트에서 종목명을 넘겨준 경우 그대로 사용, 아닌 경우 KIS API 조회
-        if name:
-            stock_name = name
-        else:
-            price_result = await run_sync(client.get_stock_price, stock_code)
-            stock_name = price_result.get("output", {}).get("hts_kor_isnm", "") or stock_code
+        opinion = await generate_stock_opinion(name)
 
-        opinion = await generate_stock_opinion(stock_name)
-
-        result = {"opinion": opinion, "stock_code": stock_code, "stock_name": stock_name}
+        result = {"opinion": opinion, "stock_code": stock_code, "stock_name": name}
 
         if opinion and opinion != "__QUOTA_EXCEEDED__" and redis.is_available():
             redis.set(cache_key, json.dumps(result, ensure_ascii=False), expire=3600)
