@@ -813,23 +813,29 @@ function StockDetail() {
             })() : null}
             {/* AI 자연어 의견 */}
             <div className="sd-ml-opinion">
-              {aiOpinionLoading ? (
-                <div className="sd-ml-opinion-loading">
-                  <span className="sd-ml-opinion-spinner" />
-                  AI가 종목 정보와 뉴스를 분석 중입니다...
+              {aiOpinion && !aiOpinionLoading && (
+                <div className="sd-ml-opinion-header">
+                  🤖 AI 전망 분석
                 </div>
-              ) : aiOpinion === '__QUOTA_EXCEEDED__' ? (
-                <span className="sd-ml-opinion-text sd-ml-opinion-fallback">일일 AI 쿼터 초과 — 자정 이후 다시 이용할 수 있습니다.</span>
-              ) : aiOpinion ? (
-                <p className="sd-ml-opinion-text">{aiOpinion}</p>
-              ) : (
-                <button
-                  className="sd-ml-opinion-btn"
-                  onClick={fetchAIOpinion}
-                >
-                  🤖 AI 종합 의견 분석
-                </button>
               )}
+              <div className="sd-ml-opinion-body">
+                {aiOpinionLoading ? (
+                  <div className="sd-ml-opinion-loading">
+                    <span className="sd-ml-opinion-spinner" />
+                    AI가 전망을 분석 중입니다...
+                  </div>
+                ) : aiOpinion === '__QUOTA_EXCEEDED__' ? (
+                  <span className="sd-ml-opinion-fallback">일일 AI 쿼터 초과 — 자정 이후 다시 이용할 수 있습니다.</span>
+                ) : aiOpinion ? (
+                  <div className="sd-ml-opinion-md">
+                    <ReactMarkdown>{aiOpinion}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <button className="sd-ml-opinion-btn" onClick={fetchAIOpinion}>
+                    🤖 AI 전망 분석
+                  </button>
+                )}
+              </div>
             </div>
             <div className="sd-pred-badges">
               <div className="sd-pred-badge-item">

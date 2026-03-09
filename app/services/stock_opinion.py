@@ -18,8 +18,7 @@ async def generate_stock_opinion(stock_name: str, **kwargs) -> Optional[str]:
             return None
 
         prompt = (
-            f"{stock_name} 주식에 대해 단기/장기 관점으로 향후 주가 전망이 어떤지 10줄 이내로 분석해줘. "
-            f"마지막 문장은 '※ 이 내용은 참고용이며 투자 권유가 아닙니다.' 로 끝내줘."
+            f"{stock_name} 주식에 대해 단기/장기 관점으로 향후 주가 전망이 어떤지 10줄 이내로 분석해줘.\n\n"
         )
 
         url = (
