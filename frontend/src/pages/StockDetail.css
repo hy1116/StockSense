@@ -368,31 +368,79 @@
 }
 
 .sd-ml-opinion {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
   padding: 0.75rem 1rem;
   background: rgba(99, 179, 237, 0.08);
   border: 1px solid rgba(99, 179, 237, 0.2);
   border-radius: 8px;
   font-size: 0.875rem;
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--text-secondary);
 }
-.sd-ml-opinion-icon { font-size: 1rem; flex-shrink: 0; margin-top: 0.05rem; }
-.sd-ml-opinion-text { flex: 1; white-space: pre-wrap; }
-.sd-ml-opinion-loading { flex: 1; opacity: 0.5; animation: sd-pulse 1.5s ease-in-out infinite; }
-.sd-ml-opinion-fallback { flex: 1; opacity: 0.7; }
+
+/* 마크다운 렌더링 영역 */
+.sd-ml-opinion-md { width: 100%; }
+.sd-ml-opinion-md h3 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 1rem 0 0.35rem;
+  padding-bottom: 0.2rem;
+  border-bottom: 1px solid rgba(99, 179, 237, 0.15);
+}
+.sd-ml-opinion-md h3:first-child { margin-top: 0; }
+.sd-ml-opinion-md p {
+  margin: 0.3rem 0;
+  color: var(--text-secondary);
+}
+.sd-ml-opinion-md ul, .sd-ml-opinion-md ol {
+  margin: 0.3rem 0;
+  padding-left: 1.2rem;
+}
+.sd-ml-opinion-md li { margin: 0.15rem 0; }
+.sd-ml-opinion-md strong { color: var(--text-primary); font-weight: 600; }
+.sd-ml-opinion-md blockquote {
+  margin: 0.75rem 0 0;
+  padding: 0.4rem 0.75rem;
+  border-left: 3px solid rgba(99, 179, 237, 0.4);
+  color: rgba(156, 163, 175, 0.7);
+  font-size: 0.8rem;
+}
+.sd-ml-opinion-md hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  margin: 0.75rem 0;
+}
+
+/* 로딩 */
+.sd-ml-opinion-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  opacity: 0.6;
+  font-size: 0.85rem;
+  animation: sd-pulse 1.5s ease-in-out infinite;
+}
+.sd-ml-opinion-spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(99, 179, 237, 0.3);
+  border-top-color: rgba(99, 179, 237, 0.9);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: sd-spin 0.8s linear infinite;
+}
+@keyframes sd-spin { to { transform: rotate(360deg); } }
+
 .sd-ml-opinion-btn {
-  flex: 1;
+  display: block;
+  width: 100%;
   background: transparent;
   border: none;
   color: rgba(99, 179, 237, 0.7);
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  padding: 0;
+  padding: 0.25rem 0;
   cursor: pointer;
-  text-align: left;
+  text-align: center;
   letter-spacing: 0.1px;
   transition: color 0.15s;
 }

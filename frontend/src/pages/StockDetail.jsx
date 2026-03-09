@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { getStockDetail, getStockChart, getStockPrediction, getStockAIOpinion, getComments, createComment, updateComment, deleteComment, getStockNews, buyStock, sellStock, getPredictionAccuracy, checkWatchlist, addToWatchlist, removeFromWatchlist } from '../services/api'
 import { createChart } from 'lightweight-charts'
+import ReactMarkdown from 'react-markdown'
 import './StockDetail.css'
 
 function StockDetail() {
@@ -806,17 +807,21 @@ function StockDetail() {
             })() : null}
             {/* AI 자연어 의견 */}
             <div className="sd-ml-opinion">
-              <span className="sd-ml-opinion-icon">🤖</span>
               {aiOpinionLoading ? (
-                <span className="sd-ml-opinion-loading">AI가 분석 중입니다...</span>
+                <div className="sd-ml-opinion-loading">
+                  <span className="sd-ml-opinion-spinner" />
+                  AI가 종목 정보와 뉴스를 분석 중입니다...
+                </div>
               ) : aiOpinion ? (
-                <span className="sd-ml-opinion-text">{aiOpinion}</span>
+                <div className="sd-ml-opinion-md">
+                  <ReactMarkdown>{aiOpinion}</ReactMarkdown>
+                </div>
               ) : (
                 <button
                   className="sd-ml-opinion-btn"
                   onClick={fetchAIOpinion}
                 >
-                  AI 의견 분석 요청
+                  🤖 AI 종합 의견 분석
                 </button>
               )}
             </div>
