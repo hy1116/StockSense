@@ -151,7 +151,12 @@ function StockDetail() {
     setAiOpinionLoading(true)
     try {
       const data = await getStockAIOpinion(symbol)
-      setAiOpinion(data?.opinion || null)
+      const opinion = data?.opinion
+      if (opinion === '__QUOTA_EXCEEDED__') {
+        setAiOpinion('__QUOTA_EXCEEDED__')
+      } else {
+        setAiOpinion(opinion || null)
+      }
     } catch (err) {
       console.error('Error fetching AI opinion:', err)
       setAiOpinion(null)
@@ -812,6 +817,8 @@ function StockDetail() {
                   <span className="sd-ml-opinion-spinner" />
                   AI가 종목 정보와 뉴스를 분석 중입니다...
                 </div>
+              ) : aiOpinion === '__QUOTA_EXCEEDED__' ? (
+                <span className="sd-ml-opinion-text sd-ml-opinion-fallback">일일 AI 쿼터 초과 — 자정 이후 다시 이용할 수 있습니다.</span>
               ) : aiOpinion ? (
                 <div className="sd-ml-opinion-md">
                   <ReactMarkdown>{aiOpinion}</ReactMarkdown>

@@ -230,11 +230,20 @@ async def get_stock_ai_opinion(
     predictor: PredictionService = Depends(get_prediction_service),
     db: AsyncSession = Depends(get_db)
 ):
-    """종목 AI 자연어 투자의견 (Gemini 생성, 종목정보+뉴스 포함)"""
+    """종목 AI 자연어 투자의견 (Gemini 생성, 종목정보+뉴스 포함, Redis 1시간 캐시)"""
     try:
         from app.services.stock_opinion import generate_stock_opinion
         from app.models.stock_news import StockNews
         from datetime import timedelta
+
+        # Redis 캐시 확인 (1시간)
+        redis = get_redis_client()
+        cache_key = f"ai_opinion:{stock_code}"
+        if redis.is_available():
+            cached = redis.get(cache_key)
+            if cached:
+                logger.info(f"AI 의견 캐시 HIT: {stock_code}")
+                return json.loads(cached)
 
         price_result = await run_sync(client.get_stock_price, stock_code)
         stock_name = price_result.get("output", {}).get("hts_kor_isnm", "")
@@ -261,7 +270,13 @@ async def get_stock_ai_opinion(
 
         opinion = await generate_stock_opinion(stock_name, pred_result, news_list)
 
-        return {"opinion": opinion, "stock_code": stock_code, "stock_name": stock_name}
+        result = {"opinion": opinion, "stock_code": stock_code, "stock_name": stock_name}
+
+        # 성공한 경우에만 캐시 저장 (1시간)
+        if opinion and redis.is_available():
+            redis.set(cache_key, json.dumps(result, ensure_ascii=False), expire=3600)
+
+        return result
     except Exception as e:
         logger.error(f"AI 의견 생성 실패 {stock_code}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

@@ -155,14 +155,20 @@ async def generate_stock_opinion(
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
+            # 429 Rate Limit 시 최대 2회 재시도 (3초 간격)
             for attempt in range(3):
                 response = await client.post(url, json=payload)
                 if response.status_code != 429:
                     break
                 if attempt < 2:
-                    logger.warning(f"Gemini 429 Rate Limit — {attempt+1}번째 재시도 대기 5초")
-                    await asyncio.sleep(5)
-            response.raise_for_status()
+                    logger.warning(f"Gemini 429 Rate Limit — {attempt+1}번째 재시도 대기 3초")
+                    await asyncio.sleep(3)
+
+        if response.status_code == 429:
+            logger.warning("Gemini 일일 쿼터 초과 — 내일 자정 리셋")
+            return "__QUOTA_EXCEEDED__"
+
+        response.raise_for_status()
 
         data = response.json()
         candidate = data["candidates"][0]
