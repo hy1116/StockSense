@@ -1187,67 +1187,68 @@
 }
 
 /* ===== Trade Section ===== */
+.sd-order-card {
+  padding: 0 !important;
+}
+
 .sd-trade {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
 }
 
+/* 매수/매도 탭 — 카드 상단 헤더 */
 .sd-trade-tabs {
-  display: flex;
-  gap: 2px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 3px;
-  border-radius: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .sd-trade-tab {
-  flex: 1;
-  padding: 0.55rem 1rem;
+  padding: 0.78rem 1rem;
   border: none;
-  background: transparent;
-  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
   cursor: pointer;
-  font-size: 0.88rem;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.35);
   transition: all 0.15s ease;
+  letter-spacing: 0.3px;
+  font-family: inherit;
+}
+
+.sd-trade-tab:first-child {
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .sd-trade-tab:hover {
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .sd-trade-tab.buy.active {
-  background: #ef4444;
-  color: #fff;
-  font-weight: 600;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
 }
 
 .sd-trade-tab.sell.active {
-  background: #3b82f6;
-  color: #fff;
-  font-weight: 600;
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
 }
 
 .sd-trade-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem 1rem;
 }
 
-.sd-trade-group {
+/* 주문유형 + 가격 한 줄 */
+.sd-trade-row2 {
   display: flex;
-  flex-direction: column;
   gap: 0.5rem;
-}
-
-.sd-trade-group label {
-  font-weight: 500;
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.5);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  align-items: center;
 }
 
 .sd-order-type-tabs {
@@ -1256,20 +1257,21 @@
   background: rgba(255, 255, 255, 0.05);
   padding: 3px;
   border-radius: 8px;
+  flex-shrink: 0;
 }
 
 .sd-order-type-tab {
-  flex: 1;
-  padding: 0.5rem 1rem;
+  padding: 0.38rem 0.7rem;
   border: none;
   background: transparent;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.45);
   transition: all 0.15s ease;
   font-family: inherit;
+  white-space: nowrap;
 }
 
 .sd-order-type-tab:hover {
@@ -1277,28 +1279,70 @@
 }
 
 .sd-order-type-tab.active {
-  background: rgba(100, 108, 255, 0.25);
+  background: rgba(100, 108, 255, 0.3);
   color: #fff;
   font-weight: 600;
+}
+
+.sd-price-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.87);
+  font-size: 0.88rem;
+  font-family: inherit;
+  transition: border-color 0.15s;
+  -moz-appearance: textfield;
+}
+
+.sd-price-input::-webkit-outer-spin-button,
+.sd-price-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.sd-price-input:focus {
+  outline: none;
+  border-color: rgba(100, 108, 255, 0.5);
+}
+
+.sd-price-input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.sd-price-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 수량 + 퀵 선택 한 줄 */
+.sd-trade-qty-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .sd-quantity-control {
   display: flex;
   align-items: center;
-  gap: 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.04);
+  flex: 1;
+  min-width: 0;
 }
 
 .sd-qty-btn {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border: none;
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.7);
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
@@ -1324,9 +1368,9 @@
   border-radius: 0 !important;
   background: transparent !important;
   text-align: center;
-  padding: 0.8rem 0.5rem;
+  padding: 0.45rem 0.25rem;
   color: rgba(255, 255, 255, 0.87);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-family: inherit;
   -moz-appearance: textfield;
 }
@@ -1341,66 +1385,59 @@
   outline: none;
 }
 
-.sd-trade-group input,
-.sd-trade-group select {
-  padding: 0.8rem 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+/* 퀵 수량 버튼 */
+.sd-qty-presets {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sd-qty-preset {
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.87);
-  font-size: 0.9rem;
-  transition: border-color 0.15s;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
   font-family: inherit;
 }
 
-.sd-trade-group input:focus,
-.sd-trade-group select:focus {
-  outline: none;
-  border-color: rgba(100, 108, 255, 0.5);
+.sd-qty-preset:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
-.sd-trade-group input::placeholder {
-  color: rgba(255, 255, 255, 0.25);
-}
-
-.sd-trade-group input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.sd-trade-total {
+/* 합계 + 버튼 한 줄 */
+.sd-trade-footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1rem;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.sd-trade-total-label {
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.5);
-  font-weight: 400;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.1rem;
 }
 
 .sd-trade-total-value {
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(255, 255, 255, 0.85);
+  flex: 1;
 }
 
 .sd-trade-btn {
-  width: 100%;
-  padding: 0.85rem;
+  padding: 0.6rem 1.5rem;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: opacity 0.15s;
   color: #fff;
-  margin-top: 0.25rem;
+  flex-shrink: 0;
+  min-width: 72px;
 }
 
 .sd-trade-btn.buy {
@@ -1855,13 +1892,20 @@
     min-width: 0;
   }
   .sd-qty-btn {
-    width: 40px;
-    min-width: 40px;
-    height: 40px;
+    width: 32px;
+    min-width: 32px;
+    height: 36px;
   }
   .sd-quantity-control input {
     min-width: 0;
-    padding: 0.7rem 0.25rem;
+    padding: 0.45rem 0.1rem;
+  }
+  .sd-qty-presets {
+    gap: 3px;
+  }
+  .sd-qty-preset {
+    padding: 0.3rem 0.4rem;
+    font-size: 0.7rem;
   }
 }
 
@@ -2035,63 +2079,45 @@
   .sd-accuracy-row:hover { background: rgba(0, 0, 0, 0.03); }
   .sd-accuracy-empty { color: rgba(17, 24, 39, 0.35); }
 
-  .sd-trade-tabs { background: #f3f4f6; }
-  .sd-trade-tab { color: rgba(17, 24, 39, 0.45); }
-  .sd-trade-tab:hover { color: rgba(17, 24, 39, 0.7); }
-  .sd-trade-tab.buy.active { background: #dc2626; color: #fff; }
-  .sd-trade-tab.sell.active { background: #2563eb; color: #fff; }
+  .sd-order-card { background: #fff; border-color: #e5e7eb; }
+  .sd-trade-tabs { border-bottom-color: #e5e7eb; }
+  .sd-trade-tab { background: #fafafa; color: rgba(17, 24, 39, 0.4); }
+  .sd-trade-tab:first-child { border-right-color: #e5e7eb; }
+  .sd-trade-tab:hover { background: #f3f4f6; color: rgba(17, 24, 39, 0.7); }
+  .sd-trade-tab.buy.active { background: rgba(220, 38, 38, 0.06); color: #dc2626; }
+  .sd-trade-tab.sell.active { background: rgba(37, 99, 235, 0.06); color: #2563eb; }
 
   .sd-order-type-tabs { background: #f3f4f6; }
   .sd-order-type-tab { color: rgba(17, 24, 39, 0.45); }
   .sd-order-type-tab:hover { color: rgba(17, 24, 39, 0.7); }
-  .sd-order-type-tab.active {
-    background: rgba(79, 70, 229, 0.15);
-    color: #4f46e5;
-  }
+  .sd-order-type-tab.active { background: rgba(79, 70, 229, 0.15); color: #4f46e5; }
 
-  .sd-quantity-control {
+  .sd-price-input {
     background: #f9fafb;
     border-color: #e5e7eb;
-  }
-  .sd-qty-btn {
-    background: #e5e7eb;
-    color: #374151;
-  }
-  .sd-qty-btn:hover {
-    background: #d1d5db;
     color: #111827;
   }
+  .sd-price-input::placeholder { color: rgba(17, 24, 39, 0.3); }
+  .sd-price-input:focus { border-color: #4f46e5; }
+
+  .sd-quantity-control { background: #f9fafb; border-color: #e5e7eb; }
+  .sd-qty-btn { background: #e5e7eb; color: #374151; }
+  .sd-qty-btn:hover { background: #d1d5db; color: #111827; }
   .sd-qty-btn:active { background: #c4c8cf; }
-  .sd-quantity-control input {
-    color: #111827;
-  }
+  .sd-quantity-control input { color: #111827; }
+
+  .sd-qty-preset { background: #f3f4f6; border-color: #e5e7eb; color: rgba(17, 24, 39, 0.55); }
+  .sd-qty-preset:hover { background: #e5e7eb; color: #111827; border-color: #d1d5db; }
+
+  .sd-trade-total-value { color: #111827; }
+  .sd-trade-btn.buy { background: #dc2626; }
+  .sd-trade-btn.sell { background: #2563eb; }
 
   .trend-neutral {
     background: rgba(107, 114, 128, 0.1);
     color: #4b5563;
     border-color: rgba(107, 114, 128, 0.2);
   }
-
-  .sd-trade-group label { color: rgba(17, 24, 39, 0.5); }
-  .sd-trade-group input,
-  .sd-trade-group select {
-    background: #f9fafb;
-    border-color: #e5e7eb;
-    color: #111827;
-  }
-  .sd-trade-group input:focus,
-  .sd-trade-group select:focus { border-color: #4f46e5; }
-  .sd-trade-group input::placeholder { color: rgba(17, 24, 39, 0.3); }
-
-  .sd-trade-total {
-    background: #f9fafb;
-    border-color: #e5e7eb;
-  }
-  .sd-trade-total-label { color: rgba(17, 24, 39, 0.5); }
-  .sd-trade-total-value { color: #111827; }
-
-  .sd-trade-btn.buy { background: #dc2626; }
-  .sd-trade-btn.sell { background: #2563eb; }
 
   .sd-news-item:hover { background: #f9fafb; }
   .sd-news-title { color: #111827; }

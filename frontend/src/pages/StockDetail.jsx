@@ -1306,8 +1306,7 @@ function StockDetail() {
       </section>
 
       {/* 주문 */}
-      <section className="sd-card">
-        <h2>주문</h2>
+      <section className="sd-card sd-order-card">
         {isLoggedIn ? (
           <div className="sd-trade">
             <div className="sd-trade-tabs">
@@ -1325,13 +1324,13 @@ function StockDetail() {
               </button>
             </div>
             <form className="sd-trade-form" onSubmit={handleOrder}>
-              <div className="sd-trade-group">
-                <label>주문유형</label>
+              {/* 주문유형 + 가격 */}
+              <div className="sd-trade-row2">
                 <div className="sd-order-type-tabs">
                   <button
                     type="button"
                     className={`sd-order-type-tab ${orderForm.orderType === '00' ? 'active' : ''}`}
-                    onClick={() => setOrderForm({ ...orderForm, orderType: '00' })}
+                    onClick={() => setOrderForm({ ...orderForm, orderType: '00', price: String(stockData?.basic_info?.current_price || '') })}
                   >
                     지정가
                   </button>
@@ -1343,33 +1342,31 @@ function StockDetail() {
                     시장가
                   </button>
                 </div>
-              </div>
-              <div className="sd-trade-group">
-                <label>가격</label>
                 <input
                   type="number"
+                  className="sd-price-input"
                   value={orderForm.orderType === '01' ? '' : orderForm.price}
                   onChange={(e) => setOrderForm({ ...orderForm, price: e.target.value })}
-                  placeholder={orderForm.orderType === '01' ? '시장가' : '주문 가격'}
+                  placeholder={orderForm.orderType === '01' ? '시장가' : '가격 입력'}
                   disabled={orderForm.orderType === '01'}
                   min="0"
                 />
               </div>
-              <div className="sd-trade-group">
-                <label>수량</label>
+              {/* 수량 + 빠른 선택 */}
+              <div className="sd-trade-qty-row">
                 <div className="sd-quantity-control">
                   <button
                     type="button"
                     className="sd-qty-btn"
                     onClick={() => setOrderForm({ ...orderForm, quantity: String(Math.max(1, (parseInt(orderForm.quantity) || 1) - 1)) })}
                   >
-                    -
+                    −
                   </button>
                   <input
                     type="number"
                     value={orderForm.quantity}
                     onChange={(e) => setOrderForm({ ...orderForm, quantity: e.target.value })}
-                    placeholder="주문 수량"
+                    placeholder="수량"
                     min="1"
                     required
                   />
@@ -1381,30 +1378,43 @@ function StockDetail() {
                     +
                   </button>
                 </div>
-              </div>
-              {orderForm.quantity && orderForm.price && orderForm.orderType !== '01' && (
-                <div className="sd-trade-total">
-                  <span className="sd-trade-total-label">총 주문금액</span>
-                  <span className="sd-trade-total-value">
-                    {formatNumber(parseInt(orderForm.quantity) * parseInt(orderForm.price))}원
-                  </span>
+                <div className="sd-qty-presets">
+                  {[1, 5, 10, 100].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      className="sd-qty-preset"
+                      onClick={() => setOrderForm({ ...orderForm, quantity: String(n) })}
+                    >
+                      {n}
+                    </button>
+                  ))}
                 </div>
-              )}
-              <button
-                type="submit"
-                className={`sd-trade-btn ${tradeTab}`}
-                disabled={
-                  !orderForm.quantity ||
-                  (orderForm.orderType !== '01' && !orderForm.price) ||
-                  buyMutation.isPending ||
-                  sellMutation.isPending
-                }
-              >
-                {(buyMutation.isPending || sellMutation.isPending)
-                  ? '주문 중...'
-                  : tradeTab === 'buy' ? '매수' : '매도'
-                }
-              </button>
+              </div>
+              {/* 합계 + 주문 버튼 */}
+              <div className="sd-trade-footer">
+                <span className="sd-trade-total-value">
+                  {orderForm.quantity && orderForm.price && orderForm.orderType !== '01'
+                    ? formatNumber(parseInt(orderForm.quantity) * parseInt(orderForm.price)) + '원'
+                    : orderForm.orderType === '01' ? '시장가 주문' : '–'
+                  }
+                </span>
+                <button
+                  type="submit"
+                  className={`sd-trade-btn ${tradeTab}`}
+                  disabled={
+                    !orderForm.quantity ||
+                    (orderForm.orderType !== '01' && !orderForm.price) ||
+                    buyMutation.isPending ||
+                    sellMutation.isPending
+                  }
+                >
+                  {(buyMutation.isPending || sellMutation.isPending)
+                    ? '주문 중...'
+                    : tradeTab === 'buy' ? '매수' : '매도'
+                  }
+                </button>
+              </div>
             </form>
           </div>
         ) : (
