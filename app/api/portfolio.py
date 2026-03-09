@@ -227,14 +227,10 @@ async def get_stock_prediction_fresh(
 async def get_stock_ai_opinion(
     stock_code: str,
     client: KISAPIClient = Depends(get_kis_client),
-    predictor: PredictionService = Depends(get_prediction_service),
-    db: AsyncSession = Depends(get_db)
 ):
-    """종목 AI 자연어 투자의견 (Gemini 생성, 종목정보+뉴스 포함, Redis 1시간 캐시)"""
+    """종목 AI 전망 의견 (Gemini, Redis 1시간 캐시)"""
     try:
         from app.services.stock_opinion import generate_stock_opinion
-        from app.models.stock_news import StockNews
-        from datetime import timedelta
 
         # Redis 캐시 확인 (1시간)
         redis = get_redis_client()
@@ -246,34 +242,13 @@ async def get_stock_ai_opinion(
                 return json.loads(cached)
 
         price_result = await run_sync(client.get_stock_price, stock_code)
-        stock_name = price_result.get("output", {}).get("hts_kor_isnm", "")
+        stock_name = price_result.get("output", {}).get("hts_kor_isnm", stock_code)
 
-        chart_result = await run_sync(client.get_daily_chart, stock_code, period="D", count=100)
-        output2 = chart_result.get("output2", [])
-
-        pred_result = await run_sync(predictor.predict_price, stock_code, stock_name, output2)
-
-        # 최근 7일 뉴스 최대 10건 조회
-        start_date = datetime.now() - timedelta(days=7)
-        news_query = (
-            select(StockNews)
-            .where(StockNews.stock_code == stock_code)
-            .where(StockNews.published_at >= start_date)
-            .order_by(StockNews.published_at.desc())
-            .limit(10)
-        )
-        news_result = await db.execute(news_query)
-        news_list = [
-            {"title": n.title, "summary": n.summary, "sentiment": n.sentiment}
-            for n in news_result.scalars().all()
-        ]
-
-        opinion = await generate_stock_opinion(stock_name, pred_result, news_list)
+        opinion = await generate_stock_opinion(stock_name)
 
         result = {"opinion": opinion, "stock_code": stock_code, "stock_name": stock_name}
 
-        # 성공한 경우에만 캐시 저장 (1시간)
-        if opinion and redis.is_available():
+        if opinion and opinion != "__QUOTA_EXCEEDED__" and redis.is_available():
             redis.set(cache_key, json.dumps(result, ensure_ascii=False), expire=3600)
 
         return result
