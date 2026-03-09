@@ -86,3 +86,16 @@ kubectl get pods -n stocksense -o wide
 echo ""
 echo "🔹 Services:"
 kubectl get svc -n stocksense
+
+# ============================================
+# Docker 미사용 이미지 정리
+# ============================================
+echo ""
+echo "▶ Cleaning up dangling Docker images..."
+docker image prune -f
+success "Docker cleanup done"
+
+echo ""
+echo "=============================================="
+echo "✅ All done!"
+echo "=============================================="

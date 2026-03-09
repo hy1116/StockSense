@@ -202,3 +202,16 @@ kubectl get cronworkflows -n stocksense 2>/dev/null || echo "   No CronWorkflows
 echo ""
 echo "🔹 Workflows:"
 kubectl get workflows -n stocksense 2>/dev/null || echo "   No Workflows found"
+
+# ============================================
+# 9. Docker 미사용 이미지 정리
+# ============================================
+echo ""
+echo "▶ [9/9] Cleaning up dangling Docker images..."
+docker image prune -f
+success "Docker cleanup done"
+
+echo ""
+echo "=============================================="
+echo "✅ All done!"
+echo "=============================================="
