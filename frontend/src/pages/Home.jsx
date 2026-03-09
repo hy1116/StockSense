@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
 import { useAuth } from '../contexts/AuthContext'
-import { getHealthCheck, getTopStocks, getMarketCapStocks, getFluctuationStocks, getPortfolio, searchStocks, getWatchlist } from '../services/api'
+import { getHealthCheck, getTopStocks, getMarketCapStocks, getFluctuationStocks, getPortfolio, searchStocks, getWatchlist, getPortfolioAIOpinion } from '../services/api'
 import './Home.css'
 
 function Home() {
@@ -170,6 +171,24 @@ function Home() {
   // 포트폴리오 새로고침 핸들러
   const handleRefreshPortfolio = () => {
     queryClient.invalidateQueries({ queryKey: ['portfolio'] })
+  }
+
+  // 포트폴리오 AI 의견
+  const [portfolioOpinion, setPortfolioOpinion] = useState(null)
+  const [portfolioOpinionLoading, setPortfolioOpinionLoading] = useState(false)
+
+  const handleFetchPortfolioOpinion = async () => {
+    if (!portfolio?.holdings?.length) return
+    setPortfolioOpinionLoading(true)
+    try {
+      const data = await getPortfolioAIOpinion(portfolio.holdings)
+      setPortfolioOpinion(data.opinion)
+    } catch (e) {
+      console.error('포트폴리오 AI 의견 오류:', e)
+      setPortfolioOpinion(null)
+    } finally {
+      setPortfolioOpinionLoading(false)
+    }
   }
 
   // 1. 데이터와 로딩 상태를 객체에 담기
@@ -464,6 +483,7 @@ function Home() {
           isLoadingPortfolio ? (
             <div className="loading">보유 종목을 불러오는 중...</div>
           ) : portfolio?.holdings && portfolio.holdings.length > 0 ? (
+            <>
             <div className="stock-list">
               <div className="stock-list-header holdings-header">
                 <span className="col-rank">No.</span>
@@ -493,6 +513,31 @@ function Home() {
                 </Link>
               ))}
             </div>
+            {/* 포트폴리오 AI 의견 */}
+            <div className="portfolio-opinion-section">
+              {!portfolioOpinion && !portfolioOpinionLoading && (
+                <button className="portfolio-opinion-btn" onClick={handleFetchPortfolioOpinion}>
+                  🤖 AI 포트폴리오 분석
+                </button>
+              )}
+              {portfolioOpinionLoading && (
+                <div className="portfolio-opinion-loading">
+                  <span className="home-spin" />분석 중...
+                </div>
+              )}
+              {portfolioOpinion && (
+                <div className="portfolio-opinion-box">
+                  <div className="portfolio-opinion-header">
+                    <span>🤖 AI 포트폴리오 분석</span>
+                    <button className="portfolio-opinion-refresh" onClick={handleFetchPortfolioOpinion} title="재분석">↺</button>
+                  </div>
+                  <div className="portfolio-opinion-md">
+                    <ReactMarkdown>{portfolioOpinion}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
+            </div>
+            </>
           ) : (
             <div className="empty-holdings">
               <div className="empty-icon">📭</div>

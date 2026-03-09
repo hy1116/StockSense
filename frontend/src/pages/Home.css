@@ -47,12 +47,18 @@
 /* ===== Asset Hero (로그인 — 토스 스타일) ===== */
 .asset-hero {
   padding: 2rem 0.25rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .asset-hero-main {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  flex: 1;
 }
 
 .asset-hero-label {
@@ -125,8 +131,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  margin-top: 0.85rem;
-  padding: 0.4rem 0.85rem;
+  margin-top: 0;
+  padding: 0.35rem 0.75rem;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
@@ -135,6 +141,8 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
 .asset-hero-toggle:hover {
@@ -156,7 +164,8 @@
 
 /* Detail rows — toggled */
 .asset-detail {
-  margin-top: 0.75rem;
+  flex-basis: 100%;
+  margin-top: 0.5rem;
   padding: 0.85rem 1rem;
   display: flex;
   flex-direction: column;
@@ -643,8 +652,153 @@
   }
 }
 
+/* ===== Portfolio AI Opinion ===== */
+.portfolio-opinion-section {
+  padding: 1rem 0 0.5rem;
+}
+
+.portfolio-opinion-btn {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgba(100, 108, 255, 0.08);
+  color: #a5a9ff;
+  border: 1px dashed rgba(100, 108, 255, 0.3);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.portfolio-opinion-btn:hover {
+  background: rgba(100, 108, 255, 0.15);
+  border-color: rgba(100, 108, 255, 0.5);
+}
+
+.portfolio-opinion-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.home-spin {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(100, 108, 255, 0.3);
+  border-top-color: #646cff;
+  border-radius: 50%;
+  animation: home-spin-anim 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes home-spin-anim {
+  to { transform: rotate(360deg); }
+}
+
+.portfolio-opinion-box {
+  border: 1px solid rgba(100, 108, 255, 0.2);
+  border-radius: 12px;
+  background: rgba(100, 108, 255, 0.05);
+  overflow: hidden;
+}
+
+.portfolio-opinion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid rgba(100, 108, 255, 0.15);
+  background: rgba(100, 108, 255, 0.08);
+}
+
+.portfolio-opinion-refresh {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.portfolio-opinion-refresh:hover {
+  color: #a5a9ff;
+}
+
+.portfolio-opinion-md {
+  padding: 0.9rem 1rem;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.portfolio-opinion-md h3 {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  margin: 0.85rem 0 0.3rem;
+  padding-bottom: 0.2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.portfolio-opinion-md h3:first-child {
+  margin-top: 0;
+}
+
+.portfolio-opinion-md p {
+  margin: 0.3rem 0;
+}
+
+.portfolio-opinion-md ul {
+  margin: 0.3rem 0;
+  padding-left: 1.2rem;
+}
+
+.portfolio-opinion-md li {
+  margin: 0.2rem 0;
+}
+
+.portfolio-opinion-md blockquote {
+  margin: 0.6rem 0 0;
+  padding: 0.4rem 0.75rem;
+  border-left: 3px solid rgba(100, 108, 255, 0.4);
+  background: rgba(100, 108, 255, 0.06);
+  border-radius: 0 6px 6px 0;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.78rem;
+}
+
 /* ===== Light Mode Support ===== */
 @media (prefers-color-scheme: light) {
+  /* asset-hero 텍스트 (흰색 계열 → 다크 계열) */
+  .asset-hero-label {
+    color: rgba(17, 24, 39, 0.45);
+  }
+  .refresh-button {
+    color: rgba(17, 24, 39, 0.4);
+  }
+  .refresh-button:hover {
+    color: rgba(17, 24, 39, 0.7);
+    background: rgba(17, 24, 39, 0.06);
+  }
+  .hero p {
+    color: rgba(17, 24, 39, 0.5);
+  }
+  .loading {
+    color: rgba(17, 24, 39, 0.4);
+  }
+  /* 보유종목 탭 items */
+  .holdings-item .stock-name { color: #111827; }
+  .holdings-item .stock-code { color: rgba(17, 24, 39, 0.4); }
+  .holdings-item .col-price  { color: #111827; }
+
   .search-form {
     background: #f3f4f6;
     border-color: #e5e7eb;
@@ -842,6 +996,49 @@
 
   .price-down {
     color: #2563eb !important;
+  }
+
+  .portfolio-opinion-btn {
+    background: rgba(100, 108, 255, 0.08);
+    color: #646cff;
+    border-color: rgba(100, 108, 255, 0.2);
+  }
+
+  .portfolio-opinion-box {
+    background: rgba(100, 108, 255, 0.04);
+    border-color: rgba(100, 108, 255, 0.15);
+  }
+
+  .portfolio-opinion-header {
+    border-bottom-color: rgba(100, 108, 255, 0.15);
+    color: #111827;
+  }
+
+  .portfolio-opinion-md {
+    color: #1f2937;
+  }
+
+  .portfolio-opinion-md h3 {
+    color: #111827;
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+  }
+
+  .portfolio-opinion-md blockquote {
+    border-left-color: rgba(100, 108, 255, 0.3);
+    color: rgba(17, 24, 39, 0.55);
+    background: rgba(100, 108, 255, 0.04);
+  }
+
+  .portfolio-opinion-refresh {
+    color: rgba(17, 24, 39, 0.4);
+  }
+
+  .portfolio-opinion-refresh:hover {
+    color: #646cff;
+  }
+
+  .portfolio-opinion-loading {
+    color: rgba(17, 24, 39, 0.5);
   }
 
 }

@@ -253,6 +253,36 @@ async def get_stock_ai_opinion(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/portfolio/ai-opinion")
+async def get_portfolio_ai_opinion(request: dict):
+    """보유 포트폴리오 AI 종합 의견 (Gemini)"""
+    try:
+        from app.services.stock_opinion import generate_portfolio_opinion
+
+        holdings = request.get("holdings", [])
+        if not holdings:
+            return {"opinion": None}
+
+        redis = get_redis_client()
+        names_key = ",".join(sorted(h.get("stock_name", "") for h in holdings))
+        cache_key = f"ai_portfolio_opinion:{hash(names_key)}"
+        if redis.is_available():
+            cached = redis.get(cache_key)
+            if cached:
+                return json.loads(cached)
+
+        opinion = await generate_portfolio_opinion(holdings)
+        result = {"opinion": opinion}
+
+        if opinion and opinion != "__QUOTA_EXCEEDED__" and redis.is_available():
+            redis.set(cache_key, json.dumps(result, ensure_ascii=False), expire=3600)
+
+        return result
+    except Exception as e:
+        logger.error(f"포트폴리오 AI 의견 생성 실패: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/stock/{stock_code}/detail", response_model=StockDetailInfo)
 async def get_stock_detail(
     stock_code: str,
