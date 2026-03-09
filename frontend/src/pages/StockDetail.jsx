@@ -150,7 +150,8 @@ function StockDetail() {
   const fetchAIOpinion = async () => {
     setAiOpinionLoading(true)
     try {
-      const data = await getStockAIOpinion(symbol)
+      const stockName = stockData?.basic_info?.stock_name || ''
+      const data = await getStockAIOpinion(symbol, stockName)
       const opinion = data?.opinion
       if (opinion === '__QUOTA_EXCEEDED__') {
         setAiOpinion('__QUOTA_EXCEEDED__')
@@ -820,9 +821,7 @@ function StockDetail() {
               ) : aiOpinion === '__QUOTA_EXCEEDED__' ? (
                 <span className="sd-ml-opinion-text sd-ml-opinion-fallback">일일 AI 쿼터 초과 — 자정 이후 다시 이용할 수 있습니다.</span>
               ) : aiOpinion ? (
-                <div className="sd-ml-opinion-md">
-                  <ReactMarkdown>{aiOpinion}</ReactMarkdown>
-                </div>
+                <p className="sd-ml-opinion-text">{aiOpinion}</p>
               ) : (
                 <button
                   className="sd-ml-opinion-btn"

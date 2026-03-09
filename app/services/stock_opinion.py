@@ -18,9 +18,9 @@ async def generate_stock_opinion(stock_name: str, **kwargs) -> Optional[str]:
             return None
 
         prompt = (
-            f"{stock_name} 주식의 최근 전망과 투자 시 고려할 점을 마크다운 형식으로 알려줘. "
-            f"섹션은 ### 으로 구분하고, 시장 동향 / 리스크 요인 / 종합 의견 순으로 작성해줘. "
-            f"마지막에 '이 내용은 참고용이며 투자 권유가 아닙니다' 면책 문구를 blockquote로 추가해줘."
+            f"{stock_name} 주식에 대한 종합적인 투자 의견을 3~5문장으로 간결하게 말해줘. "
+            f"최근 사업 현황, 주요 리스크, 전망을 포함해서 균형 잡힌 시각으로 작성하고, "
+            f"마지막 문장은 '※ 이 내용은 참고용이며 투자 권유가 아닙니다.' 로 끝내줘."
         )
 
         url = (

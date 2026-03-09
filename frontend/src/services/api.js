@@ -206,9 +206,10 @@ export const getStockPrediction = async (symbol) => {
   return response.data
 }
 
-export const getStockAIOpinion = async (symbol) => {
+export const getStockAIOpinion = async (symbol, stockName = '') => {
   const response = await api.get(`/api/portfolio/stock/${symbol}/opinion`, {
-    timeout: 30000
+    timeout: 30000,
+    params: stockName ? { name: stockName } : {}
   })
   return response.data
 }
