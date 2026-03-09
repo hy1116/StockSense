@@ -2,26 +2,27 @@
 
 수집 → 뉴스 크롤링 → 뉴스 감성분석 → 전처리 → 학습 순서로 전체 파이프라인을 실행합니다.
 """
+import os
 import sys
 import subprocess
 import logging
 from datetime import datetime
 from pathlib import Path
+_log_root_env = os.environ.get("ML_LOG_DIR")
+_LOG_ROOT = Path(_log_root_env) if _log_root_env else Path.home() / "Library" / "Logs" / "StockSense" / "ml"
+_LOG_ROOT.mkdir(parents=True, exist_ok=True)
 
-LOG_DIR = Path(__file__).parent.parent / "logs" / "ml"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
-
-_log_file = LOG_DIR / f"pipeline_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+_log_file = _LOG_ROOT / f"{datetime.now().strftime('%Y-%m-%d')}.log"
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - [pipeline] %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
         logging.FileHandler(_log_file, encoding='utf-8'),
     ]
 )
-logger = logging.getLogger("ml-pipeline")
+logger = logging.getLogger("pipeline")
 
 SCRIPTS_DIR = Path(__file__).parent
 
